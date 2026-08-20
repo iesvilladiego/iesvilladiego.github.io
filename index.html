@@ -288,6 +288,14 @@
 
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
   function requestGroupAccess(group) {
+    const expected = groupPasswords[group];
+    // Si no hay contraseña configurada para este perfil → acceso directo, sin modal
+    if (!expected) {
+      console.warn(`Perfil "${group}" sin contraseña configurada. Acceso libre.`);
+      showGroup(group);
+      return;
+    }
+    // Si hay contraseña, abrir el modal pidiéndola
     pendingGroup = group;
     const label = groupLabel(group);
     document.getElementById("groupPassTitle").textContent = "Acceso a " + label;
@@ -2119,8 +2127,8 @@
            alt="Escudo IES Virgen de Villadiego"
            onerror="this.style.fontSize='3rem';this.alt='🏫';">
     </div>
-    <p class="home-title">Bienvenido al portal de apps del IES Virgen de Villadiego (Peñaflor)</p>
-    <p class="home-sub">Selecciona tu <b>perfil</b> e introduce la <b>contraseña</b> del mismo para acceder a las aplicaciones</p>
+    <p class="home-title">Bienvenido al Portal</p>
+    <p class="home-sub">Selecciona tu perfil para acceder a las aplicaciones</p>
 
     <div class="main-buttons">
       <button class="main-btn" onclick="ies.requestGroupAccess('profesorado')">
