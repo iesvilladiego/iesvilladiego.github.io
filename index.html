@@ -1039,6 +1039,239 @@
     else showToast("Error al guardar contraseñas.", "err", 4000);
   }
 
+  // ════════════════════════════════════════════════════════
+  //  EXPORTACIÓN A PDF / EXCEL
+  // ════════════════════════════════════════════════════════
+  // Las librerías externas (SheetJS, jsPDF + autotable) se cargan
+  // bajo demanda al pulsar el botón, para no ralentizar el primer paint.
+
+  // Carga un script externo si aún no está en la página.
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('No se pudo cargar ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Recoge los datos a exportar según las selecciones del usuario.
+  function collectExportData() {
+    const expApps      = document.getElementById('expApps').checked;
+    const expAdmins    = document.getElementById('expAdmins').checked;
+    const expPass      = document.getElementById('expPass').checked;
+    const appsFilter   = document.getElementById('expAppsFilter').value;
+    const formatInput  = document.querySelector('input[name="expFormat"]:checked');
+    const format       = formatInput ? formatInput.value : 'excel';
+
+    if (!expApps && !expAdmins && !expPass) {
+      return { error: 'Selecciona al menos una sección para exportar.' };
+    }
+
+    const data = { format };
+
+    if (expApps) {
+      // Aplicar filtro por perfil si procede, y orden alfabético por nombre
+      let list = apps.slice();
+      if (appsFilter !== 'all') {
+        list = list.filter(a => a[appsFilter]);
+      }
+      list.sort((a, b) => {
+        const va = (a.name || '').toString().toLowerCase().trim();
+        const vb = (b.name || '').toString().toLowerCase().trim();
+        return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
+      });
+      data.apps = list.map(a => ({
+        'Nombre':         a.name || '',
+        'Descripción':    a.desc || '',
+        'URL':            a.url || '',
+        'Profesorado':    a.profesorado    ? 'Sí' : 'No',
+        'Gestión':        a.gestion         ? 'Sí' : 'No',
+        'Administrativa': a.administrativa  ? 'Sí' : 'No'
+      }));
+    }
+
+    if (expAdmins) {
+      data.admins = admins.map(a => ({
+        'Usuario':     a.user || '',
+        'Contraseña':  a.pass || ''
+      }));
+    }
+
+    if (expPass) {
+      data.groupPasswords = [
+        { 'Perfil': 'Profesorado',   'Contraseña': groupPasswords.profesorado    || '(vacío)' },
+        { 'Perfil': 'Gestión',       'Contraseña': groupPasswords.gestion        || '(vacío)' },
+        { 'Perfil': 'Administrativa','Contraseña': groupPasswords.administrativa || '(vacío)' }
+      ];
+    }
+
+    return data;
+  }
+
+  // Punto de entrada principal: llamado desde el botón "📥 Exportar".
+  async function exportData() {
+    const data = collectExportData();
+    if (data.error) {
+      showToast(data.error, 'err', 4000);
+      return;
+    }
+    try {
+      if (data.format === 'excel') {
+        await exportToExcel(data);
+      } else {
+        await exportToPDF(data);
+      }
+    } catch (e) {
+      console.error('Error al exportar:', e);
+      showToast('Error al generar el archivo: ' + e.message, 'err', 5000);
+    }
+  }
+
+  // ── Exportar a Excel (.xlsx) usando SheetJS ──
+  async function exportToExcel(data) {
+    showToast('Generando Excel…', 'ok', 1500);
+    await loadScript('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
+    const X = window.XLSX;
+    if (!X) throw new Error('SheetJS no disponible');
+
+    const wb = X.utils.book_new();
+
+    if (data.apps) {
+      const ws = X.utils.json_to_sheet(data.apps);
+      ws['!cols'] = [
+        { wch: 25 },  // Nombre
+        { wch: 45 },  // Descripción
+        { wch: 55 },  // URL
+        { wch: 12 },  // Profesorado
+        { wch: 12 },  // Gestión
+        { wch: 14 }   // Administrativa
+      ];
+      X.utils.book_append_sheet(wb, ws, 'Aplicaciones');
+    }
+
+    if (data.admins) {
+      const ws = X.utils.json_to_sheet(data.admins);
+      ws['!cols'] = [{ wch: 25 }, { wch: 25 }];
+      X.utils.book_append_sheet(wb, ws, 'Administradores');
+    }
+
+    if (data.groupPasswords) {
+      const ws = X.utils.json_to_sheet(data.groupPasswords);
+      ws['!cols'] = [{ wch: 20 }, { wch: 30 }];
+      X.utils.book_append_sheet(wb, ws, 'Contraseñas perfiles');
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    X.writeFile(wb, `portal-ies-config-${date}.xlsx`);
+    showToast('Excel exportado correctamente.', 'ok', 2500);
+  }
+
+  // ── Exportar a PDF usando jsPDF + autotable ──
+  async function exportToPDF(data) {
+    showToast('Generando PDF…', 'ok', 1500);
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js');
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const NAVY = [11, 37, 69];
+    const GOLD = [200, 168, 75];
+    const pageW = doc.internal.pageSize.width;
+    const pageH = doc.internal.pageSize.height;
+
+    // Cabecera
+    doc.setFillColor(...NAVY);
+    doc.rect(0, 0, pageW, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Portal IES Virgen de Villadiego — Configuración', 14, 14);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Exportado el ${new Date().toLocaleString('es-ES')}`, 14, 19);
+
+    let y = 30;
+
+    function addSectionTitle(title) {
+      // Si no cabe el título + tabla mínima, salto de página
+      if (y > pageH - 30) { doc.addPage(); y = 20; }
+      doc.setTextColor(...NAVY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      // Línea decorativa dorada a la izquierda
+      doc.setFillColor(...GOLD);
+      doc.rect(14, y - 4, 2, 7, 'F');
+      doc.text(title, 20, y + 2);
+      y += 6;
+    }
+
+    if (data.apps) {
+      addSectionTitle(`Aplicaciones (${data.apps.length})`);
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.apps[0])],
+        body: data.apps.map(a => Object.values(a)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8, cellPadding: 1.5 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },  // crema
+        columnStyles: {
+          2: { cellWidth: 70 },   // URL más ancha
+        },
+        margin: { left: 14, right: 14 },
+        didDrawPage: () => { y = doc.lastAutoTable.finalY + 8; }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    if (data.admins) {
+      addSectionTitle(`Administradores (${data.admins.length})`);
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.admins[0])],
+        body: data.admins.map(a => Object.values(a)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },
+        margin: { left: 14, right: 14 }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    if (data.groupPasswords) {
+      addSectionTitle('Contraseñas por perfil');
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.groupPasswords[0])],
+        body: data.groupPasswords.map(g => Object.values(g)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },
+        margin: { left: 14, right: 14 }
+      });
+    }
+
+    // Pie de página con número de página
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(120);
+      doc.text(`Página ${i} de ${pageCount}`, pageW - 30, pageH - 8);
+      doc.text('Portal IES Virgen de Villadiego', 14, pageH - 8);
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    doc.save(`portal-ies-config-${date}.pdf`);
+    showToast('PDF exportado correctamente.', 'ok', 2500);
+  }
+
   // ── Utilidades ────────────────────────────────────────
   function setView(id) {
     ["home","group","config"].forEach(v =>
@@ -1160,7 +1393,8 @@
     addAdminRow, saveAdminsConfig,
     saveGroupPasswordsConfig,
     hideDescModal, iconFallback,
-    sortApps, setAppsFilter
+    sortApps, setAppsFilter,
+    exportData
   };
 
   // ── Arranque ──────────────────────────────────────────
@@ -1704,6 +1938,61 @@
     box-shadow: 0 4px 14px rgba(200,168,75,.4);
   }
 
+  /* ══ Sección Exportar ═════════════════════════════════ */
+  .export-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin: .5rem 0 1rem;
+    padding: 1rem;
+    background: #f5f7fb;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  @media (max-width: 599px) {
+    .export-grid { grid-template-columns: 1fr; }
+  }
+  .export-checkboxes, .export-radios {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-top: .3rem;
+  }
+  .exp-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .9rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    font-weight: 500;
+  }
+  .exp-label input[type="checkbox"],
+  .exp-label input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .exp-label input[type="radio"] { width: 18px; height: 18px; }
+  .exp-select {
+    margin-top: .3rem;
+    max-width: 100%;
+    font-size: .82rem;
+  }
+  .export-checkboxes .exp-label:hover,
+  .export-radios .exp-label:hover {
+    color: var(--navy);
+  }
+  .exp-label input[type="checkbox"]:checked + span,
+  .exp-label input[type="radio"]:checked + span {
+    color: var(--navy);
+    font-weight: 700;
+  }
+
   .btn {
     display: inline-flex; align-items: center; justify-content: center;
     gap: .4rem;
@@ -2240,6 +2529,56 @@
       <div class="actions">
         <button class="btn btn-gold" onclick="ies.addAdminRow()">＋ Añadir administrador</button>
         <button class="btn btn-primary" onclick="ies.saveAdminsConfig()">💾 Guardar administradores</button>
+      </div>
+    </div>
+
+    <!-- Exportar datos -->
+    <div class="section-box">
+      <h3>📤 Exportar datos</h3>
+      <p class="hint">Exporta todo o parte de la configuración a PDF o Excel (.xlsx). Las librerías se cargan bajo demanda al pulsar el botón (no afectan al rendimiento inicial).</p>
+
+      <div class="export-grid">
+        <div>
+          <div class="fi-label">¿Qué exportar?</div>
+          <div class="export-checkboxes">
+            <label class="exp-label">
+              <input type="checkbox" id="expApps" checked>
+              <span>Aplicaciones</span>
+            </label>
+            <select id="expAppsFilter" class="fi exp-select">
+              <option value="all">Todas las aplicaciones</option>
+              <option value="profesorado">Sólo Profesorado</option>
+              <option value="gestion">Sólo Gestión</option>
+              <option value="administrativa">Sólo Administrativa</option>
+            </select>
+            <label class="exp-label">
+              <input type="checkbox" id="expAdmins" checked>
+              <span>Administradores</span>
+            </label>
+            <label class="exp-label">
+              <input type="checkbox" id="expPass" checked>
+              <span>Contraseñas por perfil</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <div class="fi-label">Formato de exportación</div>
+          <div class="export-radios">
+            <label class="exp-label">
+              <input type="radio" name="expFormat" value="excel" checked>
+              <span>📊 Excel (.xlsx)</span>
+            </label>
+            <label class="exp-label">
+              <input type="radio" name="expFormat" value="pdf">
+              <span>📄 PDF (.pdf)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" onclick="ies.exportData()">📥 Exportar</button>
       </div>
     </div>
   </section>
