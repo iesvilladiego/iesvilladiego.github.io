@@ -159,9 +159,9 @@
   // ── Estado global ──────────────────────────────────────
   let apps      = [];
   let admins    = [{ user: "admin", pass: "admin" }];           // Multi-administrador
-  let groupPasswords = { profesorado: "", gestion: "", administrativa: "" };
+  let groupPasswords = { profesorado: "", gestion: "", administrativa: "", ia: "" };
   let pendingGroup = null;   // Grupo pendiente de validar contraseña
-  let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'administrativa'
+  let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'administrativa' | 'ia'
   let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
 
   const ROOT           = "portal-ies";
@@ -284,6 +284,8 @@
 
   function renderHome() {
     setView("home");
+    // Mostrar botón de configuración al volver al home
+    document.querySelector('.btn-config')?.classList.remove('hidden');
   }
 
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
@@ -345,6 +347,8 @@
 
     document.getElementById("groupTitle").textContent = groupLabel(group);
     setView("group");
+    // Ocultar botón de configuración para evitar solapamiento con botón Volver flotante
+    document.querySelector('.btn-config')?.classList.add('hidden');
 
     // Lanzar descubrimiento asíncrono de iconos vía manifest/HTML
     // para cada tarjeta (buscará los iconos reales de la app y los
@@ -362,7 +366,7 @@
   }
 
   function groupLabel(g) {
-    return { profesorado: "Profesorado", gestion: "Gestión", administrativa: "Administrativa" }[g] || g;
+    return { profesorado: "Profesorado", gestion: "Gestión", administrativa: "Administrativa", ia: "IA" }[g] || g;
   }
 
   // ── Iconos: cadena de fallback desde la propia URL de la app ──
@@ -727,10 +731,12 @@
       return appsSort.direction === 'asc' ? cmp : -cmp;
     });
     const emptyRow = rowsData.length === 0
-      ? `<tr class="no-apps-row"><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
+      ? `<tr class="no-apps-row"><td colspan="8" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
       : "";
-    tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }) => `
-      <tr data-i="${i}">
+    tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }, visualIndex) => {
+      const rowClass = visualIndex % 2 === 0 ? 'row-even' : 'row-odd';
+      return `
+      <tr data-i="${i}" class="${rowClass}">
         <td data-label="Nombre"><input type="text" class="fi" value="${escHtml(a.name)}" placeholder="Nombre" data-field="name"></td>
         <td data-label="Descripción" class="desc-cell">
           <input type="text" class="fi desc-fi" value="${escHtml(a.desc || '')}" placeholder="Descripción" data-field="desc">
@@ -739,8 +745,9 @@
         <td data-label="Prof." class="chk"><input type="checkbox" ${a.profesorado    ? "checked" : ""} data-field="profesorado"></td>
         <td data-label="Gest." class="chk"><input type="checkbox" ${a.gestion        ? "checked" : ""} data-field="gestion"></td>
         <td data-label="Adm."  class="chk"><input type="checkbox" ${a.administrativa ? "checked" : ""} data-field="administrativa"></td>
+        <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
         <td data-label="" class="chk"><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
-      </tr>`).join("");
+      </tr>`;}).join("");
 
     tbody.querySelectorAll("input").forEach(inp => {
       inp.addEventListener("change", () => collectTableData());
@@ -761,12 +768,33 @@
     });
   }
 
-  // Cambia el filtro activo en la tabla de apps y refresca
+  // Cambia el filtro activo en la tabla de apps y refresca.
+   // Modo toggle: al pulsar un filtro, los demás desaparecen (display:none).
+  // Al volver a pulsar el mismo filtro activo, se restauran todos (filtro = 'all').
   function setAppsFilter(filter) {
-    appsFilter = filter;
-    document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.filter === filter);
-    });
+    const allFilterBtns = Array.from(document.querySelectorAll('#appsFilterBar .filter-btn'));
+
+    if (appsFilter === filter) {
+      // TOGGLE OFF: desactivar, mostrar todo
+      appsFilter = 'all';
+      allFilterBtns.forEach(btn => {
+        btn.style.display = '';
+        btn.classList.remove('active');
+      });
+    } else {
+      // TOGGLE ON: activar filtro, ocultar los demás
+      appsFilter = filter;
+      allFilterBtns.forEach(btn => {
+        if (btn.dataset.filter === filter) {
+          btn.style.display = '';
+          btn.classList.add('active');
+        } else {
+          btn.style.display = 'none';
+          btn.classList.remove('active');
+        }
+      });
+    }
+
     buildConfigTable();
   }
 
@@ -866,7 +894,7 @@
 
   function addAppRow() {
     collectTableData();
-    apps.push({ name: "", desc: "", url: "", profesorado: false, gestion: false, administrativa: false });
+    apps.push({ name: "", desc: "", url: "", profesorado: false, gestion: false, administrativa: false, ia: false });
     buildConfigTable();
   }
 
@@ -996,13 +1024,15 @@
     document.getElementById("passProfesorado").value    = groupPasswords.profesorado    || "";
     document.getElementById("passGestion").value        = groupPasswords.gestion        || "";
     document.getElementById("passAdministrativa").value = groupPasswords.administrativa || "";
+    document.getElementById("passIa").value             = groupPasswords.ia             || "";
   }
 
   async function saveGroupPasswordsConfig() {
     groupPasswords = {
       profesorado:    document.getElementById("passProfesorado").value,
       gestion:        document.getElementById("passGestion").value,
-      administrativa: document.getElementById("passAdministrativa").value
+      administrativa: document.getElementById("passAdministrativa").value,
+      ia:             document.getElementById("passIa").value
     };
     const ok = await saveGroupPasswords();
     if (!ok) {
@@ -1017,7 +1047,8 @@
         groupPasswords = {
           profesorado:    gp.profesorado    || "",
           gestion:        gp.gestion        || "",
-          administrativa: gp.administrativa || ""
+          administrativa: gp.administrativa || "",
+          ia:             gp.ia             || ""
         };
         fillGroupPasswordInputs();
       }
@@ -1032,7 +1063,8 @@
     groupPasswords = {
       profesorado:    document.getElementById("passProfesorado").value,
       gestion:        document.getElementById("passGestion").value,
-      administrativa: document.getElementById("passAdministrativa").value
+      administrativa: document.getElementById("passAdministrativa").value,
+      ia:             document.getElementById("passIa").value
     };
     const ok = await saveGroupPasswords();
     if (ok) showToast("✓ Guardado", "ok", 1000);
@@ -1090,7 +1122,8 @@
         'URL':            a.url || '',
         'Profesorado':    a.profesorado    ? 'Sí' : 'No',
         'Gestión':        a.gestion         ? 'Sí' : 'No',
-        'Administrativa': a.administrativa  ? 'Sí' : 'No'
+        'Administrativa': a.administrativa  ? 'Sí' : 'No',
+        'IA':             a.ia              ? 'Sí' : 'No'
       }));
     }
 
@@ -1105,7 +1138,8 @@
       data.groupPasswords = [
         { 'Perfil': 'Profesorado',   'Contraseña': groupPasswords.profesorado    || '(vacío)' },
         { 'Perfil': 'Gestión',       'Contraseña': groupPasswords.gestion        || '(vacío)' },
-        { 'Perfil': 'Administrativa','Contraseña': groupPasswords.administrativa || '(vacío)' }
+        { 'Perfil': 'Administrativa','Contraseña': groupPasswords.administrativa || '(vacío)' },
+        { 'Perfil': 'IA',            'Contraseña': groupPasswords.ia             || '(vacío)' }
       ];
     }
 
@@ -1148,7 +1182,8 @@
         { wch: 55 },  // URL
         { wch: 12 },  // Profesorado
         { wch: 12 },  // Gestión
-        { wch: 14 }   // Administrativa
+        { wch: 14 },  // Administrativa
+        { wch: 8 }    // IA
       ];
       X.utils.book_append_sheet(wb, ws, 'Aplicaciones');
     }
@@ -1276,6 +1311,11 @@
   function setView(id) {
     ["home","group","config"].forEach(v =>
       document.getElementById("view-" + v).classList.toggle("hidden", v !== id));
+    // Limpiar modal de descripción al cambiar de vista (evita que quede flotando)
+    const descModal = document.getElementById("descModal");
+    if (descModal && !descModal.classList.contains("hidden")) {
+      descModal.classList.add("hidden");
+    }
   }
 
   function escHtml(s) {
@@ -1430,7 +1470,7 @@
   loadData();
 
   // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
-  ['passProfesorado', 'passGestion', 'passAdministrativa'].forEach(id => {
+  ['passProfesorado', 'passGestion', 'passAdministrativa', 'passIa'].forEach(id => {
     const inp = document.getElementById(id);
     if (inp) {
       inp.addEventListener('change', () => autoSaveGroupPasswords());
@@ -1632,45 +1672,168 @@
   /* ══ Group view ═════════════════════════════════════ */
   #view-group {}
 
+  /* ══ Botón Volver - Diseño Responsive ═════════════ */
+
+  /* Estilos base comunes */
   .back-btn {
     display: inline-flex; align-items: center; gap: .5rem;
     background: var(--navy);
     color: var(--white);
     border: none; cursor: pointer;
-    font-size: .92rem; font-weight: 600;
-    padding: .7rem 1.3rem .7rem 1rem;
-    border-radius: 30px;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 4px 14px rgba(11,37,69,.28);
-    transition: transform .18s, box-shadow .18s, background .18s, color .18s;
+    font-size: .88rem; font-weight: 600;
+    padding: .6rem 1.1rem .6rem .9rem;
+    border-radius: 25px;
+    box-shadow: 0 4px 16px rgba(11,37,69,.35), 0 2px 6px rgba(0,0,0,.15);
+    transition: transform .18s, box-shadow .18s, background .18s, color .18s, opacity .2s;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    min-height: 44px;
+    min-height: 42px;
     letter-spacing: .02em;
     text-decoration: none;
     user-select: none;
     -webkit-user-select: none;
+
+    /* Asegurar visibilidad */
+    background: linear-gradient(135deg, #0b2545 0%, #1a3a5c 100%);
+    border: 1.5px solid rgba(200,168,75,.4);
+
+    opacity: 0.95;
   }
-  .back-btn::before {
-    content: "←";
-    font-size: 1.15rem;
-    font-weight: 800;
-    line-height: 1;
-    transition: transform .2s;
-    margin-right: .15rem;
+
+  /* Cuando el botón Volver está activo/visible, asegurar máxima visibilidad */
+  .back-btn:hover,
+  .back-btn:focus {
+    opacity: 1;
   }
-  .back-btn:hover {
-    background: var(--gold);
-    color: var(--navy);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 22px rgba(200,168,75,.45);
+
+  /* ═══ Pantallas GRANDES (≥768px): Botón FLOTANTE CENTRADO ═══ */
+  @media (min-width: 768px) {
+    .back-btn {
+      position: fixed;
+      top: 50%;
+      right: 1rem;
+      transform: translateY(-50%);
+      z-index: 1000;
+      writing-mode: horizontal-tb;
+      box-shadow:
+        0 0 0 1px rgba(200,168,75,.3),
+        0 6px 24px rgba(11,37,69,.45),
+        0 3px 12px rgba(0,0,0,.2);
+    }
+
+    .back-btn:hover {
+      transform: translateY(-50%) scale(1.05);
+      box-shadow:
+        0 0 0 1px rgba(200,168,75,.6),
+        0 8px 32px rgba(200,168,75,.4),
+        0 4px 16px rgba(0,0,0,.25);
+    }
+
+    .back-btn::before {
+      content: "\21BA";
+      font-size: 1.2rem;
+      display: block;
+      margin: 0 0 .15rem 0;
+      transition: transform .3s ease-in-out;
+    }
+
+    .back-btn:hover::before {
+      transform: rotate(-180deg);
+    }
+
+    @keyframes backBtnSlideIn {
+      from { opacity: 0; transform: translateY(-50%) translateX(20px); }
+      to   { opacity: 0.95; transform: translateY(-50%) translateX(0); }
+    }
+
+    .back-btn {
+      animation: backBtnSlideIn .3s ease-out;
+    }
+
+    /* Ocultar los contenedores originales en pantallas grandes */
+    .back-row,
+    .config-header {
+      padding-top: 0 !important;
+    }
   }
-  .back-btn:hover::before {
-    transform: translateX(-4px);
-  }
-  .back-btn:active {
-    transform: translateY(0) scale(.97);
-    box-shadow: 0 2px 10px rgba(11,37,69,.25);
+
+  /* ═══ Pantallas PEQUEÑAS (<768px): Botón ESTÁTICO AL FINAL ═══ */
+  @media (max-width: 767px) {
+    .back-btn {
+      position: static;
+      transform: none;
+      margin-top: 1.5rem;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 280px;
+      justify-content: center;
+      border-radius: 30px;
+      padding: .7rem 1.5rem;
+    }
+
+    .back-btn::before {
+      content: "\21BA";
+      font-size: 1rem;
+      margin-right: .3rem;
+      margin-bottom: 0;
+    }
+
+    .back-btn:hover::before {
+      transform: rotate(-180deg);
+      transition: transform .3s ease-in-out;
+    }
+
+    .back-btn:hover {
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .back-row {
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem 0 1rem;
+      margin-top: auto;
+      border-top: 1px solid rgba(11,37,69,.08);
+    }
+
+    .config-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+      padding: 1rem 0 .5rem;
+    }
+
+    .config-title {
+      text-align: center;
+    }
+
+    /* ═══ CUADRÍCULA 2x2 PARA BOTONES EN PANTALLAS PEQUEÑAS ═══ */
+    .main-buttons {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .7rem;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .main-btn {
+      padding: .75rem .6rem !important;
+      min-width: unset !important;
+      max-width: none !important;
+      flex-direction: column;
+      gap: .3rem;
+      font-size: .82rem !important;
+    }
+    .main-btn .btn-icon { font-size: 1.6rem; margin-bottom: 0; }
+
+    @keyframes backBtnFadeInMobile {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 0.95; transform: translateY(0); }
+    }
+
+    .back-btn {
+      animation: backBtnFadeInMobile .25s ease-out;
+    }
   }
 
   .group-heading {
@@ -1888,6 +2051,43 @@
   table#appsTable tr:hover td,
   table#adminsTable tr:hover td { background: #f0f4ff; }
 
+  /* ══ Filas alternadas (zebra striping) para mejor legibilidad ═══ */
+  table#appsTable tbody tr.row-even td {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  table#appsTable tbody tr.row-odd td {
+    background: linear-gradient(to right, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+    border-bottom: 1px solid #94a3b8;
+  }
+  /* Efecto hover que funciona sobre las filas alternadas */
+  table#appsTable tbody tr.row-even:hover td,
+  table#appsTable tbody tr.row-odd:hover td {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom-color: #93c5fd;
+  }
+  /* En móvil (tarjetas), las filas alternadas se aplican al tr completo */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-even { background: var(--white); }
+    table#appsTable tr.row-odd {
+      background: linear-gradient(to right, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+    }
+    table#appsTable tr.row-even:hover,
+    table#appsTable tr.row-odd:hover {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    }
+  }
+  @media (min-width: 401px) and (max-width: 599px) {
+    table#appsTable tr.row-even { background: var(--white); }
+    table#appsTable tr.row-odd {
+      background: linear-gradient(to right, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+    }
+    table#appsTable tr.row-even:hover,
+    table#appsTable tr.row-odd:hover {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    }
+  }
+
   .chk { text-align: center; }
   .fi {
     width: 100%; border: 1.5px solid #d1d5db;
@@ -2012,11 +2212,6 @@
     /* Separación de la tabla o barra de filtros que viene a continuación */
     margin-bottom: 1rem;
   }
-
-  /* Cuando la barra de filtros va justo después de .actions
-     (sección Aplicaciones), damos un poco más de aire entre ambas */
-  .actions + .tbl-wrap { margin-top: .4rem; }
-  .tbl-wrap + .filter-bar { margin-top: .5rem; }
 
   /* ══ Barra de filtros por perfil ════════════════════ */
   .filter-bar {
@@ -2150,7 +2345,7 @@
   /* grids de credenciales */
   .cred-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: .8rem;
     margin-bottom: 1rem;
   }
@@ -2254,6 +2449,13 @@
 
   /* ── Móvil pequeño (< 400px) ─────────────────────── */
   @media (max-width: 400px) {
+    .back-btn {
+      font-size: .78rem;
+      padding: .6rem 1.2rem;
+      max-width: 100%;
+      border-radius: 25px;
+    }
+
     .main-btn {
       min-width: 100px;
       flex: 1 1 100px;
@@ -2400,7 +2602,7 @@
 
   /* ── Móvil/tablet (600–767px) ────────────────────── */
   @media (min-width: 600px) and (max-width: 767px) {
-    .cred-grid { grid-template-columns: 1fr 1fr 1fr; }
+    .cred-grid { grid-template-columns: 1fr 1fr; }
   }
 
   /* ── Móvil: credenciales en 1 columna ────────────── */
@@ -2461,6 +2663,65 @@
     .app-grid {
       grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     }
+    .shield-wrap { width: 450px; height: 450px; }
+    .shield-wrap img { width: 385px; height: 385px; }
+  }
+
+  /* ── Pantallas 4K/Ultra-wide (1920px+) ─────────────── */
+  @media (min-width: 1920px) {
+    main { max-width: 1400px; }
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+    .shield-wrap { width: 500px; height: 500px; }
+    .shield-wrap img { width: 430px; height: 430px; }
+    .main-btn { max-width: 240px; padding: 1.6rem 2.5rem; font-size: 1.1rem; }
+  }
+
+  /* ── Dispositivos pequeños tipo watch/mini ═══════════ */
+  @media (max-width: 320px) {
+    .main-buttons {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .4rem;
+    }
+    .main-btn {
+      max-width: none !important;
+      width: 100%;
+      padding: .7rem .4rem !important;
+      font-size: .72rem !important;
+    }
+    .main-btn .btn-icon { font-size: 1.5rem; }
+    .shield-wrap { width: 180px; height: 180px; }
+    header h1 { font-size: .85rem; }
+    header .subtitle { font-size: .65rem; }
+  }
+
+  /* ── Safe Area para iPhone con notch/dynamic island ── */
+  @supports (padding: env(safe-area-inset-top)) {
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    header {
+      padding-left: calc(1rem + env(safe-area-inset-left));
+      padding-right: calc(1rem + env(safe-area-inset-right));
+    }
+    .toast {
+      bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
+  /* ── Impresión ══════════════════════════════════════ */
+  @media print {
+    body { background: white; color: black; }
+    header, .btn-config, .toast, .modal-bg { display: none !important; }
+    .app-grid { grid-template-columns: repeat(4, 1fr); }
+    .app-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+    .back-btn { display: none !important; }
   }
 
   /* ══ Utilidades adicionales ═══════════════════════ */
@@ -2565,16 +2826,19 @@
       <button class="main-btn" onclick="ies.requestGroupAccess('administrativa')">
         <span class="btn-icon">🏛️</span>Administrativa
       </button>
+      <button class="main-btn" onclick="ies.requestGroupAccess('ia')">
+        <span class="btn-icon">🤖</span>IA
+      </button>
     </div>
   </section>
 
   <!-- Vista: GRUPO -->
   <section id="view-group" class="hidden">
+    <h2 class="group-heading" id="groupTitle"></h2>
+    <div class="app-grid" id="appGrid"></div>
     <div class="back-row">
       <button class="back-btn" onclick="ies.renderHome()">Volver</button>
     </div>
-    <h2 class="group-heading" id="groupTitle"></h2>
-    <div class="app-grid" id="appGrid"></div>
   </section>
 
   <!-- Vista: CONFIGURACIÓN -->
@@ -2596,6 +2860,13 @@
           Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
           Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
         </p>
+        <div class="filter-bar" id="appsFilterBar">
+          <span class="filter-label">🔎 Filtrar por perfil:</span>
+          <button class="filter-btn" data-filter="profesorado" onclick="ies.setAppsFilter('profesorado')">👨‍🏫 Profesorado</button>
+          <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión</button>
+          <button class="filter-btn" data-filter="administrativa" onclick="ies.setAppsFilter('administrativa')">🏛️ Administrativa</button>
+          <button class="filter-btn" data-filter="ia" onclick="ies.setAppsFilter('ia')">🤖 IA</button>
+        </div>
         <div class="actions">
           <button class="btn btn-gold" onclick="ies.addAppRow()">＋ Añadir aplicación</button>
           <button class="btn btn-ghost" onclick="ies.sortApps('name')">↕ Ordenar por nombre</button>
@@ -2612,18 +2883,12 @@
                 <th>Prof.</th>
                 <th>Gest.</th>
                 <th>Adm.</th>
+                <th>IA</th>
                 <th></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
-        </div>
-        <div class="filter-bar" id="appsFilterBar">
-          <span class="filter-label">🔎 Filtrar por perfil:</span>
-          <button class="filter-btn active" data-filter="all" onclick="ies.setAppsFilter('all')">Todas</button>
-          <button class="filter-btn" data-filter="profesorado" onclick="ies.setAppsFilter('profesorado')">👨‍🏫 Profesorado</button>
-          <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión</button>
-          <button class="filter-btn" data-filter="administrativa" onclick="ies.setAppsFilter('administrativa')">🏛️ Administrativa</button>
         </div>
       </div>
     </div>
@@ -2635,7 +2900,7 @@
         <span class="acc-icon" aria-hidden="true">▾</span>
       </button>
       <div class="acc-content">
-        <p class="hint">Al pulsar "Profesorado", "Gestión" o "Administrativa" en la pantalla principal, se pedirá la contraseña correspondiente. Déjala vacía para permitir acceso libre a ese perfil (no recomendado).</p>
+        <p class="hint">Al pulsar "Profesorado", "Gestión", "Administrativa" o "IA" en la pantalla principal, se pedirá la contraseña correspondiente. Déjala vacía para permitir acceso libre a ese perfil (no recomendado).</p>
         <div class="cred-grid">
           <div>
             <div class="fi-label">Profesorado</div>
@@ -2648,6 +2913,10 @@
           <div>
             <div class="fi-label">Administrativa</div>
             <input type="text" id="passAdministrativa" class="fi" placeholder="••••••" autocomplete="off">
+          </div>
+          <div>
+            <div class="fi-label">IA</div>
+            <input type="text" id="passIa" class="fi" placeholder="••••••" autocomplete="off">
           </div>
         </div>
         <div class="actions">
@@ -2705,6 +2974,7 @@
                 <option value="profesorado">Sólo Profesorado</option>
                 <option value="gestion">Sólo Gestión</option>
                 <option value="administrativa">Sólo Administrativa</option>
+                <option value="ia">Sólo IA</option>
               </select>
               <label class="exp-label">
                 <input type="checkbox" id="expAdmins" checked>
