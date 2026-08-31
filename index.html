@@ -164,6 +164,10 @@
   let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'administrativa' | 'ia'
   let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
 
+  // Claves de grupos/categorías. Fuente única de verdad:
+  // añadir aquí un nuevo grupo lo habilita en toda la app (tablas, filtros, validación…).
+  const GROUP_KEYS = ['profesorado', 'gestion', 'administrativa', 'ia'];
+
   const ROOT           = "portal-ies";
   const appsRef        = ref(db, `${ROOT}/apps`);
   const adminsRef      = ref(db, `${ROOT}/admins`);            // NUEVO: lista de administradores
@@ -347,8 +351,6 @@
 
     document.getElementById("groupTitle").textContent = groupLabel(group);
     setView("group");
-    // Ocultar botón de configuración para evitar solapamiento con botón Volver flotante
-    document.querySelector('.btn-config')?.classList.add('hidden');
 
     // Lanzar descubrimiento asíncrono de iconos vía manifest/HTML
     // para cada tarjeta (buscará los iconos reales de la app y los
@@ -735,8 +737,14 @@
       : "";
     tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }, visualIndex) => {
       const rowClass = visualIndex % 2 === 0 ? 'row-even' : 'row-odd';
+      // Resaltar filas con nombre pero sin ninguna categoría
+      const hasName = a.name && a.name.trim();
+      const hasCat  = GROUP_KEYS.some(k => a[k]);
+      const uncategorized = hasName && !hasCat;
+      const rowClasses = [rowClass];
+      if (uncategorized) rowClasses.push('row-uncategorized');
       return `
-      <tr data-i="${i}" class="${rowClass}">
+      <tr data-i="${i}" class="${rowClasses.join(' ')}" data-uncategorized="${uncategorized}">
         <td data-label="Nombre"><input type="text" class="fi" value="${escHtml(a.name)}" placeholder="Nombre" data-field="name"></td>
         <td data-label="Descripción" class="desc-cell">
           <input type="text" class="fi desc-fi" value="${escHtml(a.desc || '')}" placeholder="Descripción" data-field="desc">
@@ -750,8 +758,41 @@
       </tr>`;}).join("");
 
     tbody.querySelectorAll("input").forEach(inp => {
-      inp.addEventListener("change", () => collectTableData());
-      inp.addEventListener("input",  () => collectTableData());
+      inp.addEventListener("change", () => {
+        collectTableData();
+        updateRowUncategorizedState(inp);
+        // Si acabamos de marcar una categoría y ya no hay apps sin categoría,
+        // ocultar inmediatamente el toast de advertencia
+        if (inp.type === 'checkbox' && inp.checked && getUncategorizedApps().length === 0) {
+          const toast = document.getElementById("toast");
+          if (toast && !toast.classList.contains("hidden")) {
+            toast.classList.add("hidden");
+            clearTimeout(toast._timer);
+          }
+        }
+        // Guardar inmediatamente en Firebase al cambiar un checkbox de categoría
+        if (inp.type === 'checkbox') {
+          const uncategorized = getUncategorizedApps();
+          saveApps().then(ok => {
+            if (!ok) {
+              showToast("Error al guardar en Firebase.", "err", 4000);
+              return;
+            }
+            // Si hay apps sin categoría, advertir (incluso al desmarcar)
+            if (uncategorized.length > 0) {
+              const names = uncategorized.map(a => `«${a.name}»`).join(', ');
+              showToast(`⚠ Sin categoría: ${names}. Debe marcarse al menos un perfil.`, "err", 4000);
+            } else {
+              showToast("✓ Guardado", "ok", 1000);
+            }
+          });
+        }
+      });
+      inp.addEventListener("input",  () => {
+        collectTableData();
+        // Actualizar resaltado al teclear el nombre
+        if (inp.dataset.field === 'name') updateRowUncategorizedState(inp);
+      });
       inp.addEventListener("blur",    () => handleAppCellBlur(inp));
     });
 
@@ -864,6 +905,13 @@
   // Autosave silencioso: guarda en Firebase con un toast muy sutil
   let _autoSaveToastTimer = null;
   async function autoSaveApps() {
+    // Advertir si hay apps con nombre pero sin categoría
+    const uncategorized = getUncategorizedApps();
+    if (uncategorized.length > 0) {
+      const names = uncategorized.map(a => `«${a.name}»`).join(', ');
+      showToast(`⚠ Sin categoría: ${names}. Debe marcarse al menos un perfil.`, "err", 4000);
+      return; // No guardar hasta que se corrija
+    }
     const ok = await saveApps();
     if (ok) {
       // Toast breve y sutil para no molestar al usuario mientras tabula
@@ -894,7 +942,9 @@
 
   function addAppRow() {
     collectTableData();
-    apps.push({ name: "", desc: "", url: "", profesorado: false, gestion: false, administrativa: false, ia: false });
+    const newApp = { name: "", desc: "", url: "" };
+    GROUP_KEYS.forEach(k => newApp[k] = false);
+    apps.push(newApp);
     buildConfigTable();
   }
 
@@ -904,8 +954,38 @@
     buildConfigTable();
   };
 
+  // Devuelve array de apps con nombre pero sin ninguna categoría marcada
+  function getUncategorizedApps() {
+    return apps.filter(a => {
+      if (!a.name || !a.name.trim()) return false;
+      return !GROUP_KEYS.some(k => a[k]);
+    });
+  }
+
+  // Actualiza dinámicamente el estado visual de una fila (resaltado sin categoría)
+  // sin reconstruir toda la tabla. Se llama al cambiar cualquier campo.
+  function updateRowUncategorizedState(el) {
+    const tr = el.closest('tr');
+    if (!tr) return;
+    const i = parseInt(tr.dataset.i);
+    if (isNaN(i) || !apps[i]) return;
+    const a = apps[i];
+    const hasName = a.name && a.name.trim();
+    const hasCat  = GROUP_KEYS.some(k => a[k]);
+    const uncategorized = hasName && !hasCat;
+    tr.classList.toggle('row-uncategorized', uncategorized);
+    tr.dataset.uncategorized = uncategorized;
+  }
+
   async function saveConfig() {
     collectTableData();
+    // Validación obligatoria: cada app con nombre debe tener al menos una categoría
+    const uncategorized = getUncategorizedApps();
+    if (uncategorized.length > 0) {
+      const names = uncategorized.map(a => `«${a.name}»`).join(', ');
+      showToast(`Cada aplicación debe clasificarse en al menos un perfil. Sin categoría: ${names}`, "err", 7000);
+      return;
+    }
     apps = apps.filter(a => a.name || a.url);
     const ok = await saveApps();
     if (!ok) {
@@ -2085,6 +2165,32 @@
     table#appsTable tr.row-even:hover,
     table#appsTable tr.row-odd:hover {
       background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    }
+  }
+
+  /* ══ Fila sin categoría: resaltado de advertencia ═══ */
+  table#appsTable tbody tr.row-uncategorized td {
+    background: linear-gradient(to right, #fef2f2 0%, #fee2e2 50%, #fef2f2 100%) !important;
+    border-bottom: 1px solid #fca5a5 !important;
+  }
+  table#appsTable tbody tr.row-uncategorized:hover td {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+    border-bottom-color: #f87171 !important;
+  }
+  table#appsTable tbody tr.row-uncategorized {
+    animation: uncategorizedPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes uncategorizedPulse {
+    0%, 100% { box-shadow: inset 4px 0 0 #ef4444; }
+    50%      { box-shadow: inset 4px 0 0 #f97316; }
+  }
+  /* En móvil (tarjetas) */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-uncategorized {
+      background: linear-gradient(to right, #fef2f2 0%, #fee2e2 50%, #fef2f2 100%) !important;
+      outline: 2.5px solid #ef4444;
+      outline-offset: -1px;
+      border-radius: 12px;
     }
   }
 
