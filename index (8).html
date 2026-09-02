@@ -1,0 +1,4941 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
+<!-- ═══════ TEMA Y COLORES ═══════ -->
+<meta name="theme-color" content="#0b2545" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b2545" media="(prefers-color-scheme: dark)">
+<meta name="msapplication-navbutton-color" content="#0b2545">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Portal IES">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<meta name="format-detection" content="email=no">
+<meta name="format-detection" content="address=no">
+<meta http-equiv="x-ua-compatible" content="IE=edge">
+<!-- ═══════ OPEN GRAPH / SOCIAL ═══════ -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Portal IES Virgen de Villadiego">
+<meta property="og:description" content="Portal de aplicaciones del IES Virgen de Villadiego. Acceso rápido a las aplicaciones del centro para Profesorado, Gestión, Recursos e IA.">
+<meta property="og:image" content="img/escudo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Portal IES Virgen de Villadiego">
+<!-- ═══════ SEGURIDAD ═══════ -->
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="description" content="Portal de aplicaciones del IES Virgen de Villadiego. Acceso rápido a las aplicaciones del centro para Profesorado, Gestión, Recursos e IA.">
+
+<!-- ═══════ PWA: manifest, iconos y favicon ═══════ -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="img/favicon-48x48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="img/icon-96x96.png">
+<link rel="icon" type="image/png" sizes="144x144" href="img/icon-144x144.png">
+<link rel="icon" type="image/png" sizes="192x192" href="img/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="256x256" href="img/icon-256x256.png">
+<link rel="icon" type="image/png" sizes="384x384" href="img/icon-384x384.png">
+<link rel="icon" type="image/png" sizes="512x512" href="img/icon-512x512.png">
+<link rel="icon" type="image/x-icon" href="img/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="img/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="img/icon-144x144.png">
+<link rel="apple-touch-icon" sizes="167x167" href="img/icon-144x144.png">
+<link rel="apple-touch-icon" sizes="180x180" href="img/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="mask-icon" href="img/icon-512x512-maskable.png" color="#0b2545">
+<meta name="msapplication-TileColor" content="#0b2545">
+<meta name="msapplication-TileImage" content="img/icon-144x144.png">
+<meta name="msapplication-config" content="browserconfig.xml">
+
+<title>Portal IES Virgen de Villadiego</title>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ════════════════════════════════════════════════════════
+  //  CONFIGURACIÓN FIREBASE
+  // ════════════════════════════════════════════════════════
+  const DEFAULT_DB_URL = "https://iesvdv-96a18-default-rtdb.europe-west1.firebasedatabase.app";
+  const URL_PREFIX = "https://iesvilladiego.github.io/";
+
+  // ── Mapeo palabras-clave → emoji para iconos auto-generados ──
+  // Si el texto de la descripción contiene alguna de estas palabras,
+  // se usa el emoji correspondiente como icono de fallback.
+  const DESCRIPTION_EMOJIS = [
+    { kw: ['calendario','calendario','agenda','horario','schedule'], em: '📅' },
+    { kw: ['biblioteca','library','libro','libros','book'], em: '📚' },
+    { kw: ['alumno','alumn','estudiante','student'], em: '👨‍🎓' },
+    { kw: ['profesor','docente','teacher'], em: '👨‍🏫' },
+    { kw: ['correo','mail','email','buzón'], em: '📧' },
+    { kw: ['chat','mensaje','comunic','whatsapp','telegram'], em: '💬' },
+    { kw: ['nota','apunte','note'], em: '📝' },
+    { kw: ['mapa','map'], em: '🗺️' },
+    { kw: ['foto','photo','image','galería'], em: '📷' },
+    { kw: ['video','vídeo','multimedia'], em: '🎬' },
+    { kw: ['música','music','audio'], em: '🎵' },
+    { kw: ['mate','math','matemátic'], em: '➗' },
+    { kw: ['ciencia','science','física','química','biología'], em: '🔬' },
+    { kw: ['arte','art','dibujo'], em: '🎨' },
+    { kw: ['deporte','sport','fútbol','baloncesto'], em: '⚽' },
+    { kw: ['comida','comedor','food','menú','almuerzo'], em: '🍽️' },
+    { kw: ['dinero','money','pago','caja','tesorería'], em: '💰' },
+    { kw: ['hora','tiempo','reloj','time','hora'], em: '⏰' },
+    { kw: ['clima','weather','meteorolog'], em: '☀️' },
+    { kw: ['noticia','news','periodico'], em: '📰' },
+    { kw: ['nube','cloud','drive'], em: '☁️' },
+    { kw: ['documento','doc','pdf','word'], em: '📄' },
+    { kw: ['carpeta','folder'], em: '📁' },
+    { kw: ['enlace','link','acceso directo'], em: '🔗' },
+    { kw: ['seguridad','password','contraseña','lock','acceso'], em: '🔐' },
+    { kw: ['llave','key'], em: '🗝️' },
+    { kw: ['inicio','home','portada'], em: '🏠' },
+    { kw: ['escuela','instituto','school','centro'], em: '🏫' },
+    { kw: ['ordenador','portatil','computer','pc','laptop'], em: '💻' },
+    { kw: ['teléfono','phone','movil','móvil'], em: '📱' },
+    { kw: ['imprimir','print','impresora'], em: '🖨️' },
+    { kw: ['servicio','service','mantenimiento'], em: '🛠️' },
+    { kw: ['registro','register','listado','lista'], em: '📋' },
+    { kw: ['gráfico','graph','chart','estadístic'], em: '📊' },
+    { kw: ['calificación','nota','examen','test','evaluación'], em: '✏️' },
+    { kw: ['puerta','acceso','entrada','salida','control'], em: '🚪' },
+    { kw: ['tutoría','tutor','orientación'], em: '🧭' },
+    { kw: ['consejo escolar','claustro','Junta'], em: '👥' },
+    { kw: ['transporte','bus','autobús','ruta'], em: '🚌' },
+    { kw: ['salud','enfermería','médico','medico'], em: '⚕️' },
+    { kw: ['orientación','orientacion','vocacional'], em: '🧭' },
+    { kw: ['idioma','inglés','francés','alemán','lengua'], em: '🌍' },
+    { kw: ['tecnología','tecnologia','tech','digital','app','software'], em: '💻' },
+    { kw: ['programación','programacion','code','codigo','developer'], em: '⚙️' },
+    { kw: ['juego','game','play'], em: '🎮' },
+    { kw: ['herramienta','tool','utilidad','recurs'], em: '🔧' },
+  ];
+
+  // Busca el primer emoji cuyo keyword aparezca en el texto (case-insensitive).
+  function descriptionToEmoji(text) {
+    if (!text) return null;
+    const lower = text.toLowerCase();
+    for (const item of DESCRIPTION_EMOJIS) {
+      for (const k of item.kw) {
+        if (lower.includes(k)) return item.em;
+      }
+    }
+    return null;
+  }
+
+  // Genera un icono SVG personalizado a partir de la app:
+  // 1. Si la descripción contiene un keyword → emoji sobre fondo coloreado
+  // 2. Si no, primera letra del nombre/descripción sobre fondo coloreado
+  // El color de fondo es determinista (hash del texto → hue), para que la
+  // misma app tenga siempre el mismo color.
+  function generateAutoIcon(app) {
+    const name = (app.name || "").trim();
+    const desc = (app.desc || "").trim();
+    const emoji = descriptionToEmoji(desc) || descriptionToEmoji(name);
+
+    // Hash determinista del nombre + descripción → hue
+    const sourceText = name || desc || "?";
+    let hash = 0;
+    for (let i = 0; i < sourceText.length; i++) {
+      hash = ((hash << 5) - hash + sourceText.charCodeAt(i)) | 0;
+    }
+    const hue = Math.abs(hash) % 360;
+    const bgColor = `hsl(${hue}, 65%, 45%)`;
+
+    if (emoji) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">`
+        + `<rect width="64" height="64" rx="14" fill="${bgColor}"/>`
+        + `<text x="32" y="46" font-size="38" text-anchor="middle">${emoji}</text>`
+        + `</svg>`;
+      return "data:image/svg+xml," + encodeURIComponent(svg);
+    }
+
+    // Letra inicial sobre fondo coloreado
+    const letter = (sourceText.charAt(0) || "?").toUpperCase();
+    // Sanitizar letra para prevenir XSS en SVG (mejora portada de TecDeA)
+    const safeLetter = letter.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\-\s]/g, '?').substring(0, 2);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">`
+      + `<rect width="64" height="64" rx="14" fill="${bgColor}"/>`
+      + `<text x="32" y="46" font-size="36" font-family="Arial, Helvetica, sans-serif" font-weight="bold" text-anchor="middle" fill="white">${safeLetter}</text>`
+      + `</svg>`;
+    return "data:image/svg+xml," + encodeURIComponent(svg);
+  }
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyAZrgrH46VBv56E9i8MUzwtxyoQf8t7He0",
+    authDomain:        "iesvdv-96a18.firebaseapp.com",
+    databaseURL:       DEFAULT_DB_URL,
+    projectId:         "iesvdv-96a18",
+    storageBucket:     "iesvdv-96a18.firebasestorage.app",
+    messagingSenderId: "526669274609",
+    appId:             "1:526669274609:web:87c40e7203a6ce17467850",
+    measurementId:     "G-566MSBZWY9"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // ── Estado global ──────────────────────────────────────
+  let apps      = [];
+  let admins    = [{ user: "admin", pass: "admin" }];           // Multi-administrador
+  let groupPasswords = { profesorado: "", gestion: "", recursos: "", ia: "" };
+  let pendingGroup = null;   // Grupo pendiente de validar contraseña
+  let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
+  let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
+
+  // Claves de grupos/categorías. Fuente única de verdad:
+  // añadir aquí un nuevo grupo lo habilita en toda la app (tablas, filtros, validación…).
+  // NOTA: la antigua categoría «administrativa» pasó a llamarse «recursos».
+  const GROUP_KEYS = ['profesorado', 'gestion', 'recursos', 'ia'];
+
+  const ROOT           = "portal-ies";
+  const appsRef        = ref(db, `${ROOT}/apps`);
+  const adminsRef      = ref(db, `${ROOT}/admins`);            // NUEVO: lista de administradores
+  const groupPassRef   = ref(db, `${ROOT}/groupPasswords`);    // NUEVO: contraseñas por perfil
+  const legacyAdminRef = ref(db, `${ROOT}/admin`);             // Compatibilidad versión anterior
+
+  // ── Normalización de datos desde Firebase ─────────────
+  // Firebase puede devolver un array (claves 0..n secuenciales) o un objeto
+  // (si hubo huecos o claves no numéricas). Esta función garantiza siempre un array.
+  function normalizeList(v) {
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === "object") return Object.values(v);
+    return [];
+  }
+
+  // ── Migración de categoría renombrada: «administrativa» → «recursos» ──
+  // Las apps guardadas con la clave antigua se convierten al vuelo para que
+  // no se pierda ninguna clasificación. En el próximo guardado ya se persiste
+  // con la clave nueva.
+  function migrateAppCategories(a) {
+    if (a && typeof a === "object" && a.administrativa !== undefined && a.recursos === undefined) {
+      a.recursos = a.administrativa;
+      delete a.administrativa;
+    }
+    return a;
+  }
+
+  // ── Carga inicial ──────────────────────────────────────
+  // IMPORTANTE: usamos Promise.allSettled (no Promise.all) para que el fallo
+  // de una ruta (p. ej. permisos en reglas de Firebase sobre 'admins' o
+  // 'groupPasswords' que todavía no estaban creadas) NO impida cargar las
+  // demás (apps, etc.). Antes, un único get rechazado vaciaba toda la carga.
+  async function loadData() {
+    const results = await Promise.allSettled([
+      get(appsRef),
+      get(adminsRef),
+      get(groupPassRef),
+      get(legacyAdminRef)
+    ]);
+
+    // Apps — siempre se procesa aunque las demás fallen
+    if (results[0].status === "fulfilled") {
+      const snap = results[0].value;
+      if (snap.exists()) {
+        apps = normalizeList(snap.val());
+        // Limpieza defensiva: descartar entradas que no sean objetos válidos
+        apps = apps.filter(a => a && typeof a === "object");
+        // Migración de la antigua categoría «administrativa» a «recursos»
+        apps = apps.map(migrateAppCategories);
+      }
+    } else {
+      console.warn("No se pudo cargar 'apps' desde Firebase:", results[0].reason);
+    }
+
+    // Administradores (multi-admin) — con migración legacy
+    if (results[1].status === "fulfilled") {
+      const snap = results[1].value;
+      const v = snap.exists() ? snap.val() : null;
+      const list = normalizeList(v).filter(a => a && a.user && a.pass);
+      if (list.length > 0) admins = list;
+    } else {
+      console.warn("No se pudo cargar 'admins' desde Firebase:", results[1].reason);
+    }
+    // Migración desde versión anterior (admin único) si no había lista nueva
+    if (admins.length === 0 && results[3].status === "fulfilled") {
+      const snap = results[3].value;
+      if (snap.exists()) {
+        const a = snap.val();
+        admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
+      }
+    } else if (admins.length === 0 && results[3].status === "rejected") {
+      console.warn("No se pudo cargar 'admin' (legacy) desde Firebase:", results[3].reason);
+    }
+    // Garantía final: siempre al menos un admin por defecto
+    if (admins.length === 0) admins = [{ user: "admin", pass: "admin" }];
+
+    // Contraseñas por perfil
+    if (results[2].status === "fulfilled") {
+      const snap = results[2].value;
+      if (snap.exists()) {
+        const gp = snap.val() || {};
+        groupPasswords = {
+          profesorado: gp.profesorado || "",
+          gestion:     gp.gestion     || "",
+          recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
+          ia:          gp.ia          || ""
+        };
+      }
+    } else {
+      console.warn("No se pudo cargar 'groupPasswords' desde Firebase:", results[2].reason);
+    }
+
+    // Estado inicial conocido: evita un guardado/toast fantasma al primer blur
+    // (mejora portada de TecDeA)
+    markAppsAsSaved(apps); // lo cargado de la BD es residente desde el principio
+    _lastSavedAppsJson = JSON.stringify(apps);
+
+    // Si el usuario entró en Configuración antes de que loadData terminara,
+    // refrescar las tablas/inputs con los datos recién cargados.
+    const configView = document.getElementById("view-config");
+    if (configView && !configView.classList.contains("hidden")) {
+      buildConfigTable();
+      buildAdminsTable();
+      fillGroupPasswordInputs();
+    } else {
+      renderHome();
+    }
+
+    // Aviso al usuario si alguna ruta de Firebase no se pudo leer
+    const errs = results.filter(r => r.status === "rejected");
+    if (errs.length > 0) {
+      showToast(
+        `Aviso: ${errs.length} ruta(s) de Firebase no se pudieron leer. Revisa la consola (F12) y las reglas de seguridad.`,
+        "err", 7000
+      );
+    }
+  }
+
+  // ── Persistencia ──────────────────────────────────────
+  // Devuelven true/false para que el caller pueda informar al usuario
+  // si Firebase rechaza la escritura (permisos, reglas, conexión, etc.)
+  // Apps cuya versión actual ya vive en la base de datos (las cargadas al inicio
+  // y las incluidas en algún guardado con éxito). Permite al autoguardado omitir
+  // del payload las filas NUEVAS incompletas sin riesgo de perder apps existentes
+  // (p. ej. renombradas o a las que se les quitó la categoría). — mejora TecDeA
+  const _dbResidentApps = new WeakSet();
+  function markAppsAsSaved(list) {
+    (list || []).forEach(a => { if (a && typeof a === 'object') _dbResidentApps.add(a); });
+  }
+  function isAppResident(a) { return _dbResidentApps.has(a); }
+
+  // Rechaza la promesa si la escritura no se confirma en `ms` (evita dejar el
+  // autoguardado bloqueado para siempre si la red o Firebase no responden).
+  function withTimeout(p, ms) {
+    return Promise.race([
+      Promise.resolve(p),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout: Firebase no confirma la escritura')), ms))
+    ]);
+  }
+
+  async function saveApps(payload) {
+    const list = payload || apps;
+    try { await withTimeout(set(appsRef, list), 5000); markAppsAsSaved(list); return true; }
+    catch(e) { console.error("Error guardando apps:", e); return false; }
+  }
+  async function saveAdmins() {
+    try { await set(adminsRef, admins); return true; }
+    catch(e) { console.error("Error guardando admins:", e); return false; }
+  }
+  async function saveGroupPasswords() {
+    try { await set(groupPassRef, groupPasswords); return true; }
+    catch(e) { console.error("Error guardando groupPasswords:", e); return false; }
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  LÓGICA DE PANTALLAS
+  // ══════════════════════════════════════════════════════
+
+  function renderHome() {
+    setView("home");
+    // Mostrar botón de configuración al volver al home
+    document.querySelector('.btn-config')?.classList.remove('hidden');
+  }
+
+  // ── Botones principales: piden contraseña antes de mostrar el grupo ──
+  function requestGroupAccess(group) {
+    const expected = groupPasswords[group];
+    // Si no hay contraseña configurada para este perfil → acceso directo, sin modal
+    if (!expected) {
+      console.warn(`Perfil "${group}" sin contraseña configurada. Acceso libre.`);
+      showGroup(group);
+      return;
+    }
+    // Si hay contraseña, abrir el modal pidiéndola
+    pendingGroup = group;
+    const label = groupLabel(group);
+    document.getElementById("groupPassTitle").textContent = "Acceso a " + label;
+    document.getElementById("groupPassError").textContent = "";
+    document.getElementById("groupPassInput").value = "";
+    document.getElementById("groupPassModal").classList.remove("hidden");
+    setTimeout(() => document.getElementById("groupPassInput").focus(), 50);
+  }
+
+  function closeGroupPassModal() {
+    document.getElementById("groupPassModal").classList.add("hidden");
+    pendingGroup = null;
+  }
+
+  function doGroupLogin() {
+    const input   = document.getElementById("groupPassInput").value;
+    const expected = groupPasswords[pendingGroup];
+    const g = pendingGroup;
+    if (!expected) {
+      // Sin contraseña configurada → acceso libre (con aviso en consola)
+      console.warn("Perfil sin contraseña configurada. Acceso libre.");
+      closeGroupPassModal();
+      showGroup(g);
+    } else if (input === expected) {
+      closeGroupPassModal();
+      showGroup(g);
+    } else {
+      document.getElementById("groupPassError").textContent = "Contraseña incorrecta.";
+      const inp = document.getElementById("groupPassInput");
+      inp.value = "";
+      inp.focus();
+    }
+  }
+
+  function showGroup(group) {
+    let filtered = apps.filter(a => a[group]);
+    // Ordenar alfabéticamente por nombre (case-insensitive, español)
+    filtered.sort((a, b) => {
+      const va = (a.name || "").toString().toLowerCase().trim();
+      const vb = (b.name || "").toString().toLowerCase().trim();
+      return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
+    });
+    const grid     = document.getElementById("appGrid");
+    grid.innerHTML = filtered.length
+      ? filtered.map(a => appCard(a)).join("")
+      : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
+
+    document.getElementById("groupTitle").textContent = groupLabel(group);
+    setView("group");
+    // Asegurar que el botón Configuración sea visible en las vistas de grupo
+    document.querySelector('.btn-config')?.classList.remove('hidden');
+    // Asegurar que el botón Configuración sea visible en las vistas de grupo
+    document.querySelector('.btn-config')?.classList.remove('hidden');
+
+    // Lanzar descubrimiento asíncrono de iconos vía manifest/HTML
+    // para cada tarjeta (buscará los iconos reales de la app y los
+    // antepondrá a la cadena de fallback).
+    if (filtered.length) {
+      grid.querySelectorAll("img[data-app-url]").forEach(img => {
+        const url = img.getAttribute("data-app-url");
+        if (url) {
+          discoverIcons(img, url).catch(err =>
+            console.warn("discoverIcons error:", err)
+          );
+        }
+      });
+    }
+  }
+
+  function groupLabel(g) {
+    return { profesorado: "Profesorado", gestion: "Gestión", recursos: "Recursos", ia: "IA" }[g] || g;
+  }
+
+  // ── Iconos: cadena de fallback desde la propia URL de la app ──
+  // Estrategia (por orden):
+  //   1. Iconos declarados en el manifest PWA (vía fetch asíncrono → discoverIcons)
+  //   2. Iconos declarados en <link rel="icon"> del HTML (vía fetch asíncrono)
+  //   3. Rutas comunes relativas a la app (favicon.ico, icons/, img/, etc.)
+  //   4. favicon.ico y favicon.png en la raíz del dominio (origin)
+  //   5. Servicio de Google (favicon proxy)
+  //   6. Servicio de DuckDuckGo
+  //   7. SVG emoji por defecto 🔗
+  //
+  // Como los navegadores NO pueden listar el contenido de una carpeta remota
+  // (no hay FTP/WebDAV), esta función prueba muchas rutas comunes en orden.
+  // El primer source que cargue correctamente detiene la cadena vía onerror.
+  function iconSources(url) {
+    const sources = [];
+    let appUrl, origin, hostname;
+
+    // Validación de URL antes de procesar (mejora portada de TecDeA)
+    if (!url || typeof url !== 'string' || url === '#') {
+      return sources; // Devolver array vacío si la URL no es válida
+    }
+
+    try {
+      const u = new URL(url);
+
+      // Seguridad: no procesar URLs con protocolos peligrosos
+      if (!['http:', 'https:'].includes(u.protocol)) {
+        console.warn('[Portal IES] Protocolo no permitido para iconos:', u.protocol);
+        return sources;
+      }
+
+      origin   = u.origin;
+      hostname = u.hostname;
+      // Quita barra final para construir rutas relativas a la app
+      appUrl   = url.replace(/\/+$/, '');
+    } catch (e) {
+      console.warn('[Portal IES] URL inválida para iconos:', url, e);
+      return sources;
+    }
+
+    // Nombres de archivo de icono, ORDENADOS POR TAMAÑO DESCENDENTE
+    // (probamos primero los de mayor resolución para mejor calidad visual)
+    const fileNames = [
+      // PWA icons de mayor resolución (512x512 = 262144 px²)
+      'icon-512x512.png',
+      'icon-512.png',
+      'icon-384x384.png',
+      'icon-310x310.png',          // Microsoft tile (310² = 96100)
+      'icon-256x256.png',          // 65536
+      'icon-256.png',
+      'icon-192x192.png',          // 36864
+      'icon-192.png',
+      'icon-180x180.png',
+      'icon-167x167.png',
+      'icon-152x152.png',
+      'icon-150x150.png',
+      'icon-144x144.png',
+      // Apple touch icons (suelen ser 180x180 o similar)
+      'apple-touch-icon.png',
+      'apple-touch-icon-precomposed.png',
+      'apple-touch-icon-180x180.png',
+      'apple-touch-icon-167x167.png',
+      'apple-touch-icon-152x152.png',
+      'apple-touch-icon-144x144.png',
+      // Icono genérico (tamaño desconocido, suele ser grande)
+      'icon.png',
+      // Favicon al final (suele ser el más pequeño: 16x16, 32x32, 48x48)
+      'favicon.png',
+      'favicon.ico',
+    ];
+
+    // Subcarpetas típicas donde suelen vivir los iconos
+    const subFolders = ['', 'icons', 'img', 'images', 'assets', 'static'];
+
+    // Probar todas las combinaciones relativas a la URL de la app
+    // (no solo al dominio raíz → para /mmo/ también prueba /mmo/icons/...)
+    for (const sub of subFolders) {
+      const base = sub ? `${appUrl}/${sub}` : appUrl;
+      for (const f of fileNames) {
+        sources.push(`${base}/${f}`);
+      }
+    }
+
+    // También el favicon en la raíz del dominio (origin)
+    if (origin && origin !== "null") {
+      sources.push(`${origin}/apple-touch-icon.png`);
+      sources.push(`${origin}/icon-512x512.png`);
+      sources.push(`${origin}/icon-192x192.png`);
+      sources.push(`${origin}/favicon.png`);
+      sources.push(`${origin}/favicon.ico`);
+    }
+
+    // Servicios externos como último recurso (Google ofrece sz=128 que es decente)
+    if (hostname) {
+      sources.push(`https://www.google.com/s2/favicons?sz=128&domain=${hostname}`);
+      sources.push(`https://icons.duckduckgo.com/ip3/${hostname}.ico`);
+    }
+
+    return sources;
+  }
+
+  const DEFAULT_ICON_SVG = "data:image/svg+xml," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="18" font-size="20">🔗</text></svg>'
+  );
+
+  function appCard(a) {
+    // Sanitización XSS: escapar nombre y validar URL (mejora portada de TecDeA)
+    const safeName = escHtml(a.name || 'Sin nombre');
+    const safeUrl  = sanitizeUrl(a.url);
+
+    const sources = iconSources(safeUrl);
+    // Último fallback: icono auto-generado a partir de la descripción/nombre
+    sources.push(generateAutoIcon(a));
+    const first   = sources[0] || DEFAULT_ICON_SVG;
+    const rest    = sources.slice(1);
+    const fbAttr  = rest.length
+      ? ` data-fb="${escHtml(JSON.stringify(rest))}"`
+      : "";
+    return `
+      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="app-card">
+        <div class="app-card-icon-wrap">
+          <img src="${first}" alt="" loading="lazy"${fbAttr}
+               data-app-url="${safeUrl}"
+               onerror="ies.iconFallback(this)">
+        </div>
+        <span class="app-card-name">${safeName}</span>
+      </a>`;
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  SANITIZACIÓN DE URLs (Seguridad — mejora portada de TecDeA)
+  // ══════════════════════════════════════════════════════
+  function sanitizeUrl(url) {
+    if (typeof url !== 'string') return '#';
+    url = url.trim();
+
+    // Solo permitir http/https
+    const allowedProtocols = /^https?:\/\//i;
+    if (!allowedProtocols.test(url)) {
+      // Si no tiene protocolo, asumir https para validación
+      if (url.includes('://') || url.includes('javascript:') || url.includes('data:')) {
+        return '#'; // Protocolo peligroso
+      }
+      // URL relativa o sin protocolo - intentar arreglar
+      if (url && !url.startsWith('#')) {
+        url = 'https://' + url;
+      } else {
+        return '#';
+      }
+    }
+
+    // Limitar longitud máxima para evitar DoS
+    if (url.length > 2000) return '#';
+
+    // Eliminar caracteres de control y null bytes
+    url = url.replace(/[\x00-\x1f\x7f]/g, '');
+
+    return url;
+  }
+
+  // Handler de fallback en cadena para el <img> cuando un source falla
+  function iconFallback(img) {
+    const raw = img.getAttribute("data-fb");
+    if (!raw) {
+      img.src = DEFAULT_ICON_SVG;
+      img.removeAttribute("onerror");
+      return;
+    }
+    try {
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list) || list.length === 0) throw new Error("empty");
+      const next = list.shift();
+      img.src = next;
+      if (list.length) img.setAttribute("data-fb", JSON.stringify(list));
+      else img.removeAttribute("data-fb");
+    } catch {
+      img.src = DEFAULT_ICON_SVG;
+      img.removeAttribute("onerror");
+    }
+  }
+
+  // ── Descubrimiento asíncrono de iconos vía manifest PWA ──
+  // Devuelve array de URLs absolutas de iconos extraídos del manifest.
+  // Funciona en sitios con CORS abierto (GitHub Pages, la mayoría de PWAs).
+
+  // Timeout global para fetch de iconos (5 segundos) — mejora portada de TecDeA
+  const ICON_FETCH_TIMEOUT = 5000;
+
+  async function fetchWithTimeout(url, options = {}, timeout = ICON_FETCH_TIMEOUT) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn(`[Portal IES] Timeout cargando: ${url}`);
+      }
+      throw error;
+    }
+  }
+
+  async function tryManifestIcons(baseUrl) {
+    let appUrl, origin;
+    try {
+      const u = new URL(baseUrl);
+      origin = u.origin;
+      appUrl = baseUrl.replace(/\/+$/, '');
+    } catch { return []; }
+
+    // Orden de candidatos a manifest (PWA estándar y variantes)
+    const manifestCandidates = [
+      `${appUrl}/manifest.webmanifest`,  // PWA estándar
+      `${appUrl}/manifest.json`,          // antiguo pero común
+      `${appUrl}/site.webmanifest`,
+      `${appUrl}/static/manifest.json`,
+      `${origin}/manifest.webmanifest`,
+      `${origin}/manifest.json`,
+    ];
+
+    const discovered = [];
+    for (const mUrl of manifestCandidates) {
+      try {
+        const resp = await fetchWithTimeout(mUrl, { mode: 'cors', redirect: 'follow' });
+        if (!resp.ok) continue;
+        // Validar content-type antes de parsear JSON (mejora portada de TecDeA)
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('json') && !contentType.includes('text/plain')) {
+          continue;
+        }
+        const manifest = await resp.json();
+        if (manifest && Array.isArray(manifest.icons)) {
+          // Resolver cada ic.src a URL absoluta (relativa al manifest)
+          // y capturar el tamaño (mayor tamaño = mejor calidad)
+          const iconList = manifest.icons
+            .filter(ic => ic && ic.src)
+            .map(ic => {
+              try {
+                const abs = new URL(ic.src, mUrl).href;
+                // Parsear sizes: "192x192" → 192*192 = 36864
+                // (algunos manifest usan "any" o múltiples tamaños separados por espacio)
+                let size = 0;
+                if (ic.sizes) {
+                  // Tomar el mayor de los tamaños declarados
+                  const sizes = String(ic.sizes).split(/\s+/);
+                  for (const s of sizes) {
+                    const m = s.match(/(\d+)x(\d+)/i);
+                    if (m) {
+                      const area = parseInt(m[1]) * parseInt(m[2]);
+                      if (area > size) size = area;
+                    }
+                  }
+                }
+                // Preferimos purpose="any" sobre "maskable" (maskable tiene padding interno)
+                const isMaskable = ic.purpose === 'maskable';
+                return { url: abs, size, isMaskable };
+              } catch { return null; }
+            })
+            .filter(ic => ic !== null);
+
+          // Ordenar por tamaño DESCENDENTE (mayor primero), y preferir "any" sobre "maskable"
+          iconList.sort((a, b) => {
+            // Primero los no-maskable, dentro de cada grupo por tamaño descendente
+            if (a.isMaskable !== b.isMaskable) return a.isMaskable ? 1 : -1;
+            return b.size - a.size;
+          });
+
+          for (const ic of iconList) {
+            discovered.push(ic.url);
+          }
+          if (discovered.length > 0) break; // Encontrado, no probar más
+        }
+      } catch {
+        // CORS o error de red → probar siguiente candidato
+        continue;
+      }
+    }
+    return discovered;
+  }
+
+  // ── Descubrimiento asíncrono vía HTML <link rel="icon"> ──
+  // Hace fetch del HTML y parsea las etiquetas <link> con iconos.
+  async function tryHtmlIcons(baseUrl) {
+    try {
+      const resp = await fetchWithTimeout(baseUrl, { mode: 'cors', redirect: 'follow' });
+      if (!resp.ok) return [];
+
+      // Validar content-type (debe ser HTML) — mejora portada de TecDeA
+      const contentType = resp.headers.get('content-type') || '';
+      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+        return [];
+      }
+
+      const html = await resp.text();
+
+      // Limitar tamaño para prevenir DoS por memoria
+      if (html.length > 500000) { // 500KB max
+        console.warn('[Portal IES] HTML demasiado grande para parsear iconos');
+        return [];
+      }
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const icons = [];
+      const selectors = [
+        'link[rel="icon"]',
+        'link[rel="shortcut icon"]',
+        'link[rel="apple-touch-icon"]',
+        'link[rel="apple-touch-icon-precomposed"]',
+      ];
+      for (const sel of selectors) {
+        doc.querySelectorAll(sel).forEach(link => {
+          const href = link.getAttribute('href');
+          if (href) {
+            try {
+              const url = new URL(href, baseUrl).href;
+              // Solo aceptar URLs seguras (http/https)
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                icons.push(url);
+              }
+            } catch {}
+          }
+        });
+      }
+      return icons.slice(0, 10); // Limitar a 10 iconos máximos
+    } catch {
+      return [];
+    }
+  }
+
+  // ── Punto de entrada: descubre iconos y los antepone a la cadena ──
+  // Llamado desde showGroup para cada <img> recién renderizado.
+  async function discoverIcons(img, appUrl) {
+    // Si ya cargó OK, no tocar
+    if (img.complete && img.naturalWidth > 0) return;
+
+    // Marcar como procesando para evitar llamadas duplicadas (mejora TecDeA)
+    if (img.dataset.iconProcessing === 'true') return;
+    img.dataset.iconProcessing = 'true';
+
+    try {
+      // 1) Probar manifest (más fiable para PWAs)
+      let discovered = await tryManifestIcons(appUrl);
+
+      // 2) Combinar con <link rel="icon"> del HTML
+      const htmlIcons = await tryHtmlIcons(appUrl);
+      discovered = [...discovered, ...htmlIcons];
+
+      if (discovered.length === 0) return;
+
+      // Si durante el fetch asíncrono el <img> ya cargó algo válido, no pisar
+      if (img.complete && img.naturalWidth > 0) {
+        // Comprueba que NO sea ya el fallback SVG por defecto
+        if (!String(img.src).startsWith(DEFAULT_ICON_SVG.slice(0, 50))) return;
+      }
+
+      // Anteponer las URLs descubiertas a la cadena data-fb existente
+      let currentRemaining = [];
+      try {
+        const raw = img.getAttribute('data-fb');
+        if (raw) currentRemaining = JSON.parse(raw);
+      } catch {}
+
+      // Cadena final: descubiertas primero, luego la original, sin duplicados
+      // (limitada a 15 URLs máx. — mejora portada de TecDeA)
+      const newChain = [...discovered, ...currentRemaining]
+        .filter((u, i, arr) => arr.indexOf(u) === i)
+        .slice(0, 15);
+
+      if (newChain.length === 0) return;
+
+      // Poner la primera URL descubierta como src, el resto como data-fb
+      const first = newChain.shift();
+      img.src = first;
+      if (newChain.length > 0) {
+        img.setAttribute('data-fb', JSON.stringify(newChain));
+      } else {
+        img.removeAttribute('data-fb');
+      }
+    } catch (error) {
+      console.warn('[Portal IES] Error en discoverIcons:', error.message);
+    } finally {
+      img.dataset.iconProcessing = 'false';
+    }
+  }
+
+  // ── Login pantalla configuración (multi-admin) ───────
+  function showLoginModal() {
+    // Si ya estamos en la pantalla de configuración, no hacer nada (mejora TecDeA)
+    const configView = document.getElementById("view-config");
+    if (configView && !configView.classList.contains("hidden")) {
+      return; // Ya estamos en configuración, no mostrar modal
+    }
+
+    document.getElementById("loginError").textContent = "";
+    document.getElementById("loginUser").value = "";
+    document.getElementById("loginPass").value = "";
+    document.getElementById("loginModal").classList.remove("hidden");
+    setTimeout(() => document.getElementById("loginUser").focus(), 50);
+  }
+
+  function closeLoginModal() {
+    document.getElementById("loginModal").classList.add("hidden");
+  }
+
+  // ── Modal «Sobre esta app» (Vibe Coding · reporte de bugs) — mejora TecDeA ──
+  function showAboutModal() {
+    document.getElementById("aboutModal").classList.remove("hidden");
+  }
+
+  function closeAboutModal() {
+    document.getElementById("aboutModal").classList.add("hidden");
+  }
+
+  function doLogin() {
+    const u = document.getElementById("loginUser").value.trim();
+    const p = document.getElementById("loginPass").value;
+    const found = admins.find(a => a.user === u && a.pass === p);
+    if (found) {
+      closeLoginModal();
+      renderConfig();
+    } else {
+      document.getElementById("loginError").textContent = "Usuario o contraseña incorrectos.";
+    }
+  }
+
+  // ── Pantalla configuración ────────────────────────────
+  function renderConfig() {
+    // Resetear filtros al entrar en configuración (mejora portada de TecDeA)
+    appsFilter = 'all';
+    document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
+      btn.style.display = '';
+      btn.classList.remove('active');
+    });
+    buildConfigTable();
+    buildAdminsTable();
+    fillGroupPasswordInputs();
+    setView("config");
+    // Ocultar el botón de Configuración en la propia pantalla de Configuración
+    document.querySelector('.btn-config')?.classList.add('hidden');
+  }
+
+  // ── Tabla de aplicaciones ─────────────────────────────
+  // ── Helpers de URL con prefijo fijo ──────────────────
+  // El prefijo https://iesvilladiego.github.io/ se muestra como texto
+  // fijo (no editable) en la pantalla de Configuración. El usuario solo
+  // teclea la ruta (p. ej. "mmo") y se almacena la URL completa
+  // (prefijo + ruta) en Firebase.
+  function urlPathOf(fullUrl) {
+    if (!fullUrl) return "";
+    if (fullUrl.startsWith(URL_PREFIX)) return fullUrl.slice(URL_PREFIX.length);
+    // Caso legacy: si la URL no empieza por el prefijo, devolver la URL completa
+    return fullUrl;
+  }
+
+  // Devuelve el HTML de la celda URL según el modo (prefijo o externa)
+  function buildUrlCellHtml(a) {
+    // Modo "externo": URL no vacía y no empieza por el prefijo
+    const isExternal = a.url && !a.url.startsWith(URL_PREFIX);
+    if (isExternal) {
+      return `<input type="url" class="fi url-fi url-full-input" value="${escHtml(a.url)}" placeholder="https://…" data-field="url_full">`;
+    }
+    // Modo "prefijo": URL vacía o empieza por el prefijo → input solo ruta
+    const path = a.url ? a.url.slice(URL_PREFIX.length) : "";
+    return `<div class="url-input-group">
+        <span class="url-prefix">${URL_PREFIX}</span>
+        <input type="text" class="url-path-input" value="${escHtml(path)}" placeholder="ruta (p. ej. mmo) o pega https://… para URL externa" data-field="url_path">
+      </div>`;
+  }
+
+  function buildConfigTable() {
+    const tbody = document.querySelector("#appsTable tbody");
+    // Aplicar filtro por perfil (manteniendo el índice original en el array apps)
+    const rowsData = [];
+    apps.forEach((a, i) => {
+      const matches = appsFilter === 'all' || a[appsFilter];
+      if (matches) rowsData.push({ app: a, idx: i });
+    });
+    // Aplicar ordenación (por defecto: alfabético por nombre)
+    rowsData.sort((x, y) => {
+      const va = (x.app[appsSort.field] || "").toString().toLowerCase().trim();
+      const vb = (y.app[appsSort.field] || "").toString().toLowerCase().trim();
+      const cmp = va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
+      return appsSort.direction === 'asc' ? cmp : -cmp;
+    });
+    const emptyRow = rowsData.length === 0
+      ? `<tr class="no-apps-row"><td colspan="8" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
+      : "";
+    tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }, visualIndex) => {
+      const rowClass = visualIndex % 2 === 0 ? 'row-even' : 'row-odd';
+      // Resaltar filas con nombre pero sin ninguna categoría
+      const hasName = a.name && a.name.trim();
+      const hasCat  = GROUP_KEYS.some(k => a[k]);
+      const uncategorized = hasName && !hasCat;
+      const rowClasses = [rowClass];
+      if (uncategorized) rowClasses.push('row-uncategorized');
+      return `
+      <tr data-i="${i}" class="${rowClasses.join(' ')}" data-uncategorized="${uncategorized}">
+        <td data-label="Nombre"><input type="text" class="fi" value="${escHtml(a.name)}" placeholder="Nombre" data-field="name"></td>
+        <td data-label="Descripción" class="desc-cell">
+          <input type="text" class="fi desc-fi" value="${escHtml(a.desc || '')}" placeholder="Descripción" data-field="desc">
+        </td>
+        <td data-label="URL" class="url-cell">${buildUrlCellHtml(a)}</td>
+        <td data-label="Prof." class="chk"><input type="checkbox" ${a.profesorado    ? "checked" : ""} data-field="profesorado"></td>
+        <td data-label="Gest." class="chk"><input type="checkbox" ${a.gestion        ? "checked" : ""} data-field="gestion"></td>
+        <td data-label="Rec." class="chk"><input type="checkbox" ${a.recursos       ? "checked" : ""} data-field="recursos"></td>
+        <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
+        <td data-label="" class="chk"><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
+      </tr>`;}).join("");
+
+    // ══ LIMPIAR EVENT LISTENERS ANTERIORES (evita memory leaks — mejora TecDeA) ══
+    tbody.querySelectorAll("input, select").forEach(el => {
+      el.replaceWith(el.cloneNode(true));
+    });
+
+    // Añadir event listeners frescos
+    tbody.querySelectorAll("input").forEach(inp => {
+      inp.addEventListener("change", () => {
+        collectTableData();
+        updateRowUncategorizedState(inp);
+        // Si acabamos de marcar una categoría y ya no hay apps sin categoría,
+        // ocultar inmediatamente el toast de advertencia
+        if (inp.type === 'checkbox' && inp.checked && getUncategorizedApps().length === 0) {
+          const toast = document.getElementById("toast");
+          if (toast && !toast.classList.contains("hidden")) {
+            toast.classList.add("hidden");
+            clearTimeout(toast._timer);
+          }
+        }
+        // Guardar inmediatamente en Firebase al cambiar un checkbox de categoría
+        // (autoguardado tolerante — mejora portada de TecDeA)
+        if (inp.type === 'checkbox') {
+          persistAppsChanges().then(notifyPersistResult);
+        }
+      });
+      inp.addEventListener("input",  () => {
+        collectTableData();
+        // Actualizar resaltado al teclear el nombre
+        if (inp.dataset.field === 'name') updateRowUncategorizedState(inp);
+      });
+      inp.addEventListener("blur",    () => handleAppCellBlur(inp));
+
+      // Validación de nombres duplicados/similares (solo campo nombre — mejora TecDeA)
+      if (inp.dataset.field === 'name') {
+        // Validar al perder el focus (blur)
+        inp.addEventListener('blur', function() {
+          const tr = this.closest('tr');
+          if (!tr) return;
+          const i = parseInt(tr.dataset.i);
+          if (!isNaN(i)) {
+            validateAppName(this, i);
+          }
+        });
+
+        // Validación con debounce mientras escribe (después de 3 caracteres)
+        let nameTimeout = null;
+        inp.addEventListener('input', function() {
+          clearTimeout(nameTimeout);
+          const val = this.value.trim();
+          if (val.length < 3) { // Solo validar con 3+ caracteres
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+            return;
+          }
+          nameTimeout = setTimeout(() => {
+            const tr = this.closest('tr');
+            if (!tr) return;
+            const i = parseInt(tr.dataset.i);
+            if (!isNaN(i)) {
+              validateAppName(this, i);
+            }
+          }, 800); // 800ms debounce para no molestar mientras escribe
+        });
+      }
+    });
+
+    tbody.querySelectorAll(".desc-fi").forEach(inp => {
+      // Hover (solo en dispositivos con ratón): mostrar modal en el punto del cursor
+      inp.addEventListener("mouseenter", () => {
+        if (!window.matchMedia('(hover: hover)').matches) return;
+        if (document.activeElement === inp) return;  // Si está editando, no mostrar
+        showDescModal(inp.value);
+      });
+      inp.addEventListener("mouseleave", hideDescModal);
+      // Al editar (focus), ocultar el modal para que no tape la edición
+      inp.addEventListener("focus", () => hideDescModal(true));
+    });
+
+    // Mantener sincronizada la lista de selección para exportar (mejora TecDeA)
+    // (cubre: añadir/eliminar filas, guardar, filtrar y ordenar)
+    buildExportAppSelection(true);
+  }
+
+  // Cambia el filtro activo en la tabla de apps y refresca.
+   // Modo toggle: al pulsar un filtro, los demás desaparecen (display:none).
+  // Al volver a pulsar el mismo filtro activo, se restauran todos (filtro = 'all').
+  function setAppsFilter(filter) {
+    const allFilterBtns = Array.from(document.querySelectorAll('#appsFilterBar .filter-btn'));
+
+    if (appsFilter === filter) {
+      // TOGGLE OFF: desactivar, mostrar todo
+      appsFilter = 'all';
+      allFilterBtns.forEach(btn => {
+        btn.style.display = '';
+        btn.classList.remove('active');
+      });
+    } else {
+      // TOGGLE ON: activar filtro, ocultar los demás
+      appsFilter = filter;
+      allFilterBtns.forEach(btn => {
+        if (btn.dataset.filter === filter) {
+          btn.style.display = '';
+          btn.classList.add('active');
+        } else {
+          btn.style.display = 'none';
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    buildConfigTable();
+  }
+
+  function collectTableData() {
+    document.querySelectorAll("#appsTable tbody tr").forEach(tr => {
+      const i = parseInt(tr.dataset.i);
+      if (isNaN(i)) return;
+      // Validar que el índice esté dentro del rango válido (previene bugs al eliminar filas — mejora TecDeA)
+      if (i < 0 || i >= apps.length) {
+        console.warn(`[Portal IES] Índice fuera de rango en collectTableData: ${i} (longitud: ${apps.length})`);
+        return;
+      }
+      // Asegurar que el objeto existe
+      if (!apps[i]) {
+        console.warn(`[Portal IES] apps[${i}] es undefined, inicializando...`);
+        apps[i] = { name: "", desc: "", url: "", profesorado: false, gestion: false, recursos: false, ia: false };
+      }
+      tr.querySelectorAll("[data-field]").forEach(el => {
+        const f = el.dataset.field;
+        if (f === "url_path") {
+          let val = el.value.trim();
+          // Si el usuario tecleó una URL completa (con protocolo), usarla tal cual
+          if (val.startsWith("http://") || val.startsWith("https://")) {
+            apps[i].url = val;
+          } else {
+            // Caso normal: prefijo + ruta
+            if (val.startsWith(URL_PREFIX)) val = val.slice(URL_PREFIX.length);
+            val = val.replace(/^\/+/, '');
+            apps[i].url = URL_PREFIX + val;
+          }
+        } else if (f === "url_full") {
+          // Modo externo: guardar URL tal cual la escribió el usuario
+          apps[i].url = el.value.trim();
+        } else {
+          apps[i][f] = el.type === "checkbox" ? el.checked : el.value.trim();
+        }
+      });
+    });
+  }
+
+  // Refresca SOLO la celda URL de una fila tras un blur, por si cambió de modo
+  // (prefijo ↔ externa). Evita repercutir el foco en otras celdas.
+  function refreshUrlCell(tr, i) {
+    const cell = tr.querySelector(".url-cell");
+    if (!cell) return;
+    cell.innerHTML = buildUrlCellHtml(apps[i]);
+    const newInput = cell.querySelector("input");
+    if (newInput) {
+      newInput.addEventListener("change", () => collectTableData());
+      newInput.addEventListener("input",  () => collectTableData());
+      newInput.addEventListener("blur",  () => handleAppCellBlur(newInput));
+    }
+  }
+
+  // Autosave al abandonar una celda de la tabla de apps.
+  function handleAppCellBlur(input) {
+    const tr = input.closest("tr");
+    if (!tr) return;
+    const i = parseInt(tr.dataset.i);
+    if (isNaN(i)) return;
+
+    const oldUrl = apps[i].url;
+    collectTableData();
+    const newUrl = apps[i].url;
+
+    // Guardar silenciosamente con debounce (sin toast ruidoso — mejora TecDeA)
+    debouncedAutoSaveApps();
+
+    // Si cambió el modo de la celda URL, refrescar solo esa celda
+    const oldMode = !oldUrl || oldUrl.startsWith(URL_PREFIX) ? "prefix" : "external";
+    const newMode = !newUrl || newUrl.startsWith(URL_PREFIX) ? "prefix" : "external";
+    if (oldMode !== newMode && (input.dataset.field === "url_path" || input.dataset.field === "url_full")) {
+      refreshUrlCell(tr, i);
+    }
+  }
+
+  // ── Autosave tolerante con debounce (mejora portada de TecDeA) ───────
+  let _autoSaveTimeout = null;
+  let _autoSaveToastTimer = null;
+  let _isSaving = false;               // Protección contra race conditions
+  let _lastSavedAppsJson = null;       // Snapshot del último estado conocido de apps
+
+  // ── Persistencia tolerante del autoguardado ────────────
+  // El borrado/edición de apps válidas se persiste AUNQUE haya otras apps sin
+  // categorizar (antes todo el guardado quedaba bloqueado y los borrados se
+  // perdían al recargar). Las filas NUEVAS incompletas no se dan de alta.
+
+  // ¿App con nombre pero sin ninguna categoría marcada?
+  function isAppUncategorized(a) {
+    if (!a || !a.name || !a.name.trim()) return false;
+    return !GROUP_KEYS.some(k => a[k]);
+  }
+
+  // Payload que de verdad se escribe en la BD: todas las apps salvo las nuevas
+  // (no residentes) vacías o sin categoría válida. Las ya residentes se incluyen
+  // SIEMPRE para que la reescritura completa de la lista nunca las pierda.
+  function autoSavePayload(list, isResident) {
+    return (list || []).filter(a => {
+      if (!a || typeof a !== 'object') return false;
+      if (isResident(a)) return true;
+      const hasName = !!(a.name && a.name.trim());
+      const hasUrl  = !!(a.url && a.url.trim());
+      if (!hasName && !hasUrl) return false; // fila en blanco nueva: no se da de alta
+      return !isAppUncategorized(a);         // nueva sin categoría aún → fuera
+    });
+  }
+
+  // Aviso de apps sin categoría (compartido por autoguardado y cambios de casillas)
+  function showUncategorizedToast(uncategorized, saved) {
+    const names = uncategorized.map(a => `«${a.name}»`).join(', ');
+    const tail = saved
+      ? ' El resto de cambios se ha guardado.'
+      : ' Las filas incompletas no se guardan hasta completarse.';
+    showToast(`⚠ Sin categoría: ${names}. Debe marcarse al menos un perfil.${tail}`, "err", 4000);
+  }
+
+  // Resultado de un intento de guardado → toast adecuado
+  function notifyPersistResult(res) {
+    if (!res) return;
+    if (!res.ok) { showToast("Error al guardar en Firebase.", "err", 4000); return; }
+    if (res.uncategorized && res.uncategorized.length > 0) showUncategorizedToast(res.uncategorized, res.saved);
+    else if (res.saved) showToast("✓ Guardado", "ok", 1000);
+  }
+
+  // Intento de guardado tolerante, compartido por el autoguardado y los cambios
+  // de casillas. Persiste lo que pueda sin dar de alta filas nuevas incompletas
+  // y sin bloquearse por las apps sin categorizar.
+  async function persistAppsChanges() {
+    const json = JSON.stringify(apps);
+    const uncategorized = getUncategorizedApps();
+    const payload = autoSavePayload(apps, isAppResident);
+    if (payload.length === 0 && apps.length > 0) {
+      // Solo hay filas nuevas incompletas/vacías: no tocar la BD (evita vaciarla)
+      _lastSavedAppsJson = json;
+      return { ok: true, saved: false, uncategorized };
+    }
+    const ok = await saveApps(payload);
+    // Snapshot sincronizado SIEMPRE (también si falla): sin reintentos en bucle
+    // ni toasts fantasma; el siguiente cambio real volverá a intentarlo.
+    _lastSavedAppsJson = json;
+    return { ok, saved: ok, uncategorized };
+  }
+
+  // Debounce: esperar 800ms antes de guardar (evita excesivas escrituras Firebase)
+  function debouncedAutoSaveApps() {
+    clearTimeout(_autoSaveTimeout);
+    _autoSaveTimeout = setTimeout(() => {
+      autoSaveApps();
+    }, 800);
+  }
+
+  async function autoSaveApps() {
+    // Si hay un guardado en curso, reintentarlo cuando termine (el snapshot
+    // decidirá entonces si de verdad queda algo por guardar)
+    if (_isSaving) {
+      clearTimeout(_autoSaveTimeout);
+      _autoSaveTimeout = setTimeout(autoSaveApps, 1500);
+      return;
+    }
+    _isSaving = true;
+
+    try {
+      // Si nada cambió desde el último guardado, no reescribir ni mostrar avisos
+      const json = JSON.stringify(apps);
+      if (json === _lastSavedAppsJson) return;
+
+      notifyPersistResult(await persistAppsChanges());
+    } finally {
+      _isSaving = false;
+    }
+  }
+
+  // ── Ordenación de apps en la pantalla de Configuración ──
+  // byField: "name" | "url". Persiste la elección en `appsSort` para que se
+  // mantenga al refrescar la tabla (p. ej., al editar una celda o cambiar de filtro).
+  // Si se vuelve a pulsar el mismo botón, se invierte la dirección (asc ↔ desc).
+  function sortApps(byField) {
+    collectTableData();
+    // Si ya estábamos ordenando por el mismo campo, invertir dirección
+    if (appsSort.field === byField) {
+      appsSort.direction = appsSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      appsSort.field = byField;
+      appsSort.direction = 'asc';
+    }
+    buildConfigTable();
+    const fieldLabel = byField === 'name' ? 'nombre' : 'URL';
+    const dirLabel = appsSort.direction === 'asc' ? 'ascendente' : 'descendente';
+    showToast(`Aplicaciones ordenadas por ${fieldLabel} (${dirLabel}).`, "ok", 2500);
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  DETECCIÓN DE NOMBRES DUPLICADOS/SIMILARES (mejora portada de TecDeA)
+  // ══════════════════════════════════════════════════════
+
+  // Normaliza un texto para comparación (quita espacios, acentos, minúsculas)
+  function normalizeForComparison(text) {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quita acentos
+      .replace(/[^a-z0-9\s]/g, '')     // Solo letras, números y espacios
+      .replace(/\s+/g, ' ')            // Espacios simples
+      .trim();
+  }
+
+  // Calcula similitud entre dos strings (0 = idénticos, 1 = completamente diferentes)
+  // Usa distancia de Levenshtein normalizada
+  function levenshteinDistance(a, b) {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  function calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    const norm1 = normalizeForComparison(str1);
+    const norm2 = normalizeForComparison(str2);
+    if (!norm1 || !norm2) return 0;
+
+    // Coincidencia exacta después de normalizar
+    if (norm1 === norm2) return 1;
+
+    // Uno contiene al otro (substring). Se limita a 1 para que el porcentaje
+    // mostrado nunca supere el 100% («Mate» vs «Matemáticas Aplicadas»).  
+    if (norm1.includes(norm2) || norm2.includes(norm1)) {
+      return Math.min(1, Math.max(norm1.length, norm2.length) / Math.min(norm1.length, norm2.length));
+    }
+
+    // Distancia de Levenshtein
+    const maxLen = Math.max(norm1.length, norm2.length);
+    const distance = levenshteinDistance(norm1, norm2);
+    return 1 - (distance / maxLen);
+  }
+
+  // Busca aplicaciones con nombres similares al proporcionado
+  function findSimilarApps(name, excludeIndex = -1, threshold = 0.7) {
+    if (!name || !name.trim()) return [];
+
+    const similar = [];
+    const normalizedName = normalizeForComparison(name);
+
+    apps.forEach((app, index) => {
+      if (index === excludeIndex) return;
+      if (!app.name || !app.name.trim()) return;
+
+      const similarity = calculateSimilarity(name, app.name);
+
+      if (similarity >= threshold) {
+        similar.push({
+          index,
+          name: app.name,
+          similarity: Math.round(similarity * 100),
+          isExact: normalizedName === normalizeForComparison(app.name)
+        });
+      }
+    });
+
+    // Ordenar por similitud (más similar primero)
+    similar.sort((a, b) => b.similarity - a.similarity);
+
+    return similar;
+  }
+
+  // Muestra alerta sobre aplicaciones similares encontradas
+  function showDuplicateWarning(similarApps, newName) {
+    if (!similarApps || similarApps.length === 0) return;
+
+    const exactMatch = similarApps.find(app => app.isExact);
+    let message = '';
+
+    if (exactMatch) {
+      message = `⚠️ Ya existe una aplicación con el nombre "${exactMatch.name}"`;
+    } else if (similarApps.length === 1) {
+      message = `⚠️ Nombre similar a "${similarApps[0].name}" (${similarApps[0].similarity}% parecido)`;
+    } else {
+      const names = similarApps.slice(0, 3).map(a => `"${a.name}"`).join(', ');
+      message = `⚠️ Nombre similar a: ${names}`;
+    }
+
+    showToast(message + '. Verifica si es la misma aplicación.', 'err', 5000);
+    console.warn('[Portal IES] Aplicaciones similares encontradas:', similarApps);
+  }
+
+  // Valida el nombre de una aplicación en tiempo real
+  function validateAppName(inputElement, appIndex) {
+    if (!inputElement) return;
+
+    const newName = inputElement.value.trim();
+    if (!newName || newName.length < 2) return; // No validar nombres muy cortos
+
+    const similarApps = findSimilarApps(newName, appIndex, 0.75);
+
+    if (similarApps.length > 0) {
+      showDuplicateWarning(similarApps, newName);
+
+      // Añadir indicador visual al input (borde amarillo/naranja)
+      inputElement.style.borderColor = '#E8943A';
+      inputElement.style.boxShadow = '0 0 0 3px rgba(232, 148, 58, 0.3)';
+
+    } else {
+      // Restaurar estilo normal si no hay duplicados
+      inputElement.style.borderColor = '';
+      inputElement.style.boxShadow = '';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  ALTA DE NUEVAS APLICACIONES (modal con confirmación — mejora TecDeA)
+  //  Sustituye al alta por fila vacía. Condiciones: límite de 200 apps,
+  //  nombre obligatorio, al menos un perfil, detección de duplicados/similares
+  //  (aviso, no bloqueo), URL por defecto con prefijo IES y autoguardado tolerante.
+  // ══════════════════════════════════════════════════════
+
+  // Deja la barra de filtros en «Todas» (misma secuencia que el antiguo addAppRow)
+  function resetAppsFilterUI() {
+    appsFilter = 'all';
+    document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
+      btn.style.display = '';
+      btn.classList.remove('active');
+    });
+  }
+
+  function setAddAppError(msg) {
+    const el = document.getElementById("addAppError");
+    if (el) el.textContent = msg || "";
+  }
+
+  function showAddAppModal() {
+    collectTableData();
+
+    // Límite razonable (mismo MAX_APPS que el antiguo alta por fila)
+    const MAX_APPS = 200;
+    if (apps.length >= MAX_APPS) {
+      showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
+      return;
+    }
+
+    // Reset del formulario
+    document.getElementById("addAppName").value = "";
+    document.getElementById("addAppDesc").value = "";
+    document.getElementById("addAppUrl").value = URL_PREFIX;
+    ["addAppProfesorado", "addAppGestion", "addAppRecursos", "addAppIa"].forEach(id => {
+      document.getElementById(id).checked = false;
+    });
+    document.getElementById("addAppNameWarn").classList.add("hidden");
+    const nameInp = document.getElementById("addAppName");
+    nameInp.style.borderColor = "";
+    nameInp.style.boxShadow = "";
+    setAddAppError("");
+
+    document.getElementById("addAppModal").classList.remove("hidden");
+    setTimeout(() => document.getElementById("addAppName").focus(), 50);
+  }
+
+  function closeAddAppModal() {
+    document.getElementById("addAppModal").classList.add("hidden");
+  }
+
+  function addAppFormChanged() {
+    setAddAppError("");
+  }
+
+  // Aviso en vivo de nombres duplicados/similares mientras se escribe
+  // (misma detección que la tabla: findSimilarApps con umbral 0.75)
+  function addAppRenderNameWarn() {
+    const inp  = document.getElementById("addAppName");
+    const warn = document.getElementById("addAppNameWarn");
+    if (!inp || !warn) return;
+    const val = (inp.value || "").trim();
+    if (val.length < 3) {
+      warn.textContent = "";
+      warn.classList.add("hidden");
+      inp.style.borderColor = "";
+      inp.style.boxShadow = "";
+      return;
+    }
+    const similar = findSimilarApps(val, -1, 0.75);
+    if (similar.length > 0) {
+      const exact = similar.find(s => s.isExact);
+      warn.textContent = exact
+        ? `⚠️ Ya existe una aplicación con el nombre «${exact.name}»`
+        : (similar.length === 1
+            ? `⚠️ Nombre similar a «${similar[0].name}» (${similar[0].similarity}% parecido)`
+            : `⚠️ Nombre similar a: ${similar.slice(0, 3).map(a => `«${a.name}»`).join(', ')}`);
+      warn.classList.remove("hidden");
+      inp.style.borderColor = "#E8943A";
+      inp.style.boxShadow = "0 0 0 3px rgba(232, 148, 58, 0.3)";
+    } else {
+      warn.textContent = "";
+      warn.classList.add("hidden");
+      inp.style.borderColor = "";
+      inp.style.boxShadow = "";
+    }
+  }
+
+  let _addAppNameTimer = null;
+  function addAppNameInput() {
+    setAddAppError("");
+    clearTimeout(_addAppNameTimer);
+    _addAppNameTimer = setTimeout(addAppRenderNameWarn, 600);
+  }
+
+  // Confirmación del alta: valida las condiciones y añade la app a la tabla
+  // + autoguardado tolerante (persistAppsChanges)
+  function confirmAddApp() {
+    collectTableData();
+
+    const name = document.getElementById("addAppName").value.trim();
+    const desc = document.getElementById("addAppDesc").value.trim();
+    const url  = document.getElementById("addAppUrl").value.trim() || URL_PREFIX;
+    const pro  = !!document.getElementById("addAppProfesorado").checked;
+    const ges  = !!document.getElementById("addAppGestion").checked;
+    const rec  = !!document.getElementById("addAppRecursos").checked;
+    const ia   = !!document.getElementById("addAppIa").checked;
+
+    setAddAppError("");
+    if (!name) {
+      setAddAppError("Escribe el nombre de la aplicación.");
+      document.getElementById("addAppName").focus();
+      return;
+    }
+    if (!(pro || ges || rec || ia)) {
+      setAddAppError("Debe marcarse al menos un perfil (Profesorado, Gestión, Recursos o IA).");
+      return;
+    }
+
+    const MAX_APPS = 200;
+    if (apps.length >= MAX_APPS) {
+      closeAddAppModal();
+      showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
+      return;
+    }
+
+    // Detección de duplicados/similares (aviso, no bloqueo — igual que en la tabla)
+    const similar = findSimilarApps(name, -1, 0.75);
+
+    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia });
+
+    // Mostrar la nueva app: reset de filtros (comportamiento del antiguo addAppRow)
+    resetAppsFilterUI();
+    buildConfigTable();
+    closeAddAppModal();
+
+    let msg = `✓ Aplicación «${name}» añadida`;
+    if (similar.length > 0) {
+      const exact = similar.find(s => s.isExact);
+      msg += exact
+        ? ` ⚠️ Ya existía una app con ese nombre`
+        : ` ⚠️ Nombre similar a «${similar[0].name}» (${similar[0].similarity}%)`;
+    }
+    showToast(msg, "ok", 3500);
+
+    // Persistir como cualquier otro cambio (tolerante con apps sin categorizar)
+    persistAppsChanges().then(notifyPersistResult);
+  }
+
+  window._delApp = function(i) {
+    const a = apps[i];
+    const label = a && a.name && a.name.trim() ? `«${a.name.trim()}»`
+                : (a && a.url ? `«${a.url}»` : 'la fila vacía');
+    if (!window.confirm(`¿Eliminar la aplicación ${label}? Se quitará de la tabla y el cambio se guardará en la base de datos.`)) return;
+    collectTableData();
+    apps.splice(i, 1);
+    buildConfigTable();
+    debouncedAutoSaveApps(); // persistir el borrado como cualquier otra edición (mejora TecDeA)
+  };
+
+  // Devuelve array de apps con nombre pero sin ninguna categoría marcada
+  function getUncategorizedApps() {
+    return apps.filter(isAppUncategorized);
+  }
+
+  // Actualiza dinámicamente el estado visual de una fila (resaltado sin categoría)
+  // sin reconstruir toda la tabla. Se llama al cambiar cualquier campo.
+  function updateRowUncategorizedState(el) {
+    const tr = el.closest('tr');
+    if (!tr) return;
+    const i = parseInt(tr.dataset.i);
+    if (isNaN(i) || !apps[i]) return;
+    const a = apps[i];
+    const hasName = a.name && a.name.trim();
+    const hasCat  = GROUP_KEYS.some(k => a[k]);
+    const uncategorized = hasName && !hasCat;
+    tr.classList.toggle('row-uncategorized', uncategorized);
+    tr.dataset.uncategorized = uncategorized;
+  }
+
+  async function saveConfig() {
+    collectTableData();
+    // Validación obligatoria: cada app con nombre debe tener al menos una categoría
+    const uncategorized = getUncategorizedApps();
+    if (uncategorized.length > 0) {
+      const names = uncategorized.map(a => `«${a.name}»`).join(', ');
+      showToast(`Cada aplicación debe clasificarse en al menos un perfil. Sin categoría: ${names}`, "err", 7000);
+      return;
+    }
+    apps = apps.filter(a => a.name || a.url);
+    const ok = await saveApps();
+    if (!ok) {
+      showToast("Error al guardar aplicaciones en Firebase. Revisa las reglas de seguridad (permisos de escritura).", "err", 7000);
+      return;
+    }
+    // Verificación: releer de Firebase para confirmar que los datos están realmente persistidos
+    let verifiedCount = apps.length;
+    try {
+      const snap = await get(appsRef);
+      const v = snap.exists() ? normalizeList(snap.val()) : [];
+      apps = v.filter(a => a && typeof a === "object").map(migrateAppCategories);
+      markAppsAsSaved(apps); // objetos releídos de la BD → residentes (mejora TecDeA)
+      verifiedCount = apps.length;
+    } catch (e) {
+      console.warn("No se pudo verificar la lectura tras guardar apps:", e);
+    }
+    _lastSavedAppsJson = JSON.stringify(apps);
+    showToast(`Aplicaciones guardadas en base de datos Firebase (${verifiedCount}).`, "ok", 4500);
+    renderConfig();
+  }
+
+  // ── Gestión de administradores (CRUD multi-admin) ─────
+  function buildAdminsTable() {
+    const tbody = document.querySelector("#adminsTable tbody");
+    tbody.innerHTML = admins.map((a, i) => `
+      <tr data-i="${i}">
+        <td data-label="Usuario"><input type="text" class="fi" value="${escHtml(a.user)}" placeholder="usuario" data-af="user" autocomplete="off"></td>
+        <td data-label="Contraseña"><input type="text" class="fi" value="${escHtml(a.pass)}" placeholder="contraseña" data-af="pass" autocomplete="new-password"></td>
+        <td data-label="" class="chk"><button class="btn-del" onclick="window._delAdmin(${i})" title="Eliminar">✕</button></td>
+      </tr>`).join("");
+
+    tbody.querySelectorAll("input").forEach(inp => {
+      inp.addEventListener("input",  () => collectAdminsData());
+      inp.addEventListener("change", () => collectAdminsData());
+      inp.addEventListener("blur",    () => handleAdminCellBlur(inp));
+    });
+  }
+
+  function collectAdminsData() {
+    document.querySelectorAll("#adminsTable tbody tr").forEach(tr => {
+      const i = parseInt(tr.dataset.i);
+      if (isNaN(i)) return;
+      tr.querySelectorAll("[data-af]").forEach(el => {
+        const f = el.dataset.af;
+        admins[i][f] = el.value.trim();
+      });
+    });
+  }
+
+  // Autosave al abandonar una celda de la tabla de administradores
+  function handleAdminCellBlur(input) {
+    collectAdminsData();
+    autoSaveAdmins();
+  }
+
+  let _isSavingAdmins = false; // Protección contra race conditions (mejora TecDeA)
+
+  async function autoSaveAdmins() {
+    // Prevenir múltiples guardados simultáneos
+    if (_isSavingAdmins) return;
+    _isSavingAdmins = true;
+
+    try {
+      // Solo guardar si todos los admins tienen user y pass (no guardar filas vacías intermedias)
+      const hasEmpty = admins.some(a => !a.user || !a.pass);
+      if (hasEmpty) return; // No guardar si hay filas incompletas
+      const users = admins.map(a => a.user);
+      const hasDup = new Set(users).size !== users.length;
+      if (hasDup) return; // No guardar si hay duplicados
+      const ok = await saveAdmins();
+      if (ok) showToast("✓ Guardado", "ok", 1000);
+      else showToast("Error al guardar administradores.", "err", 4000);
+    } finally {
+      _isSavingAdmins = false;
+    }
+  }
+
+  function addAdminRow() {
+    collectAdminsData();
+    admins.push({ user: "", pass: "" });
+    buildAdminsTable();
+  }
+
+  window._delAdmin = function(i) {
+    if (admins.length <= 1) {
+      showToast("Debe existir al menos un administrador.", "err", 5000);
+      return;
+    }
+    const a = admins[i];
+    const label = a && a.user ? `«${a.user}»` : 'este administrador';
+    if (!window.confirm(`¿Eliminar al administrador ${label}? El cambio se guardará en la base de datos.`)) return;
+    collectAdminsData();
+    admins.splice(i, 1);
+    buildAdminsTable();
+    autoSaveAdmins();
+  };
+
+  async function saveAdminsConfig() {
+    collectAdminsData();
+    const cleaned = admins.filter(a => a.user && a.pass);
+    if (cleaned.length === 0) {
+      showToast("Debe existir al menos un administrador con usuario y contraseña.", "err", 5000);
+      return;
+    }
+    const users = cleaned.map(a => a.user);
+    if (new Set(users).size !== users.length) {
+      showToast("No puede haber usuarios duplicados.", "err", 5000);
+      return;
+    }
+    admins = cleaned;
+    const ok = await saveAdmins();
+    if (!ok) {
+      showToast("Error al guardar administradores en Firebase. Revisa las reglas de seguridad.", "err", 7000);
+      return;
+    }
+    // Verificación post-guardado
+    try {
+      const snap = await get(adminsRef);
+      const v = snap.exists() ? snap.val() : null;
+      const list = normalizeList(v).filter(a => a && a.user && a.pass);
+      if (list.length > 0) admins = list;
+    } catch (e) {
+      console.warn("No se pudo verificar la lectura tras guardar admins:", e);
+    }
+    showToast(`Administradores guardados en base de datos Firebase (${admins.length}).`, "ok", 4500);
+    buildAdminsTable();
+  }
+
+  // ── Contraseñas de grupos ─────────────────────────────
+  function fillGroupPasswordInputs() {
+    document.getElementById("passProfesorado").value = groupPasswords.profesorado || "";
+    document.getElementById("passGestion").value     = groupPasswords.gestion     || "";
+    document.getElementById("passRecursos").value    = groupPasswords.recursos    || "";
+    document.getElementById("passIa").value          = groupPasswords.ia          || "";
+  }
+
+  async function saveGroupPasswordsConfig() {
+    groupPasswords = {
+      profesorado: document.getElementById("passProfesorado").value,
+      gestion:     document.getElementById("passGestion").value,
+      recursos:    document.getElementById("passRecursos").value,
+      ia:          document.getElementById("passIa").value
+    };
+    const ok = await saveGroupPasswords();
+    if (!ok) {
+      showToast("Error al guardar contraseñas en Firebase. Revisa las reglas de seguridad.", "err", 7000);
+      return;
+    }
+    // Verificación post-guardado
+    try {
+      const snap = await get(groupPassRef);
+      if (snap.exists()) {
+        const gp = snap.val() || {};
+        groupPasswords = {
+          profesorado: gp.profesorado || "",
+          gestion:     gp.gestion     || "",
+          recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
+          ia:          gp.ia          || ""
+        };
+        fillGroupPasswordInputs();
+      }
+    } catch (e) {
+      console.warn("No se pudo verificar la lectura tras guardar groupPasswords:", e);
+    }
+    showToast("Contraseñas de perfiles guardadas en base de datos Firebase.", "ok", 4500);
+  }
+
+  // Autosave al abandonar un campo de contraseñas por perfil
+  // con debounce (mejora portada de TecDeA)
+  let _groupPassSaveTimeout = null;
+
+  async function autoSaveGroupPasswords() {
+    // Debounce: esperar 600ms antes de guardar (como con apps)
+    clearTimeout(_groupPassSaveTimeout);
+    _groupPassSaveTimeout = setTimeout(async () => {
+      groupPasswords = {
+        profesorado: document.getElementById("passProfesorado").value,
+        gestion:     document.getElementById("passGestion").value,
+        recursos:    document.getElementById("passRecursos").value,
+        ia:          document.getElementById("passIa").value
+      };
+      const ok = await saveGroupPasswords();
+      if (ok) showToast("✓ Guardado", "ok", 1000);
+      else showToast("Error al guardar contraseñas.", "err", 4000);
+    }, 600);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  EXPORTACIÓN A PDF / EXCEL
+  // ════════════════════════════════════════════════════════
+  // Las librerías externas (SheetJS, jsPDF + autotable) se cargan
+  // bajo demanda al pulsar el botón, para no ralentizar el primer paint.
+
+  // Carga un script externo si aún no está en la página.
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('No se pudo cargar ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Recoge los datos a exportar según las selecciones del usuario.
+  function collectExportData() {
+    // Validación de existencia de elementos DOM (mejora portada de TecDeA)
+    const expAppsEl = document.getElementById('expApps');
+    const expAdminsEl = document.getElementById('expAdmins');
+    const expPassEl = document.getElementById('expPass');
+
+    if (!expAppsEl || !expAdminsEl || !expPassEl) {
+      console.error('[Portal IES] Elementos de exportación no encontrados en DOM');
+      return { error: 'Error interno: faltan controles de exportación. Recarga la página.' };
+    }
+
+    const expApps = expAppsEl.checked;
+    const expAdmins = expAdminsEl.checked;
+    const expPass = expPassEl.checked;
+    const formatInput = document.querySelector('input[name="expFormat"]:checked');
+    const format = formatInput ? formatInput.value : 'excel';
+
+    if (!expApps && !expAdmins && !expPass) {
+      return { error: 'Selecciona al menos una sección para exportar.' };
+    }
+
+    const data = { format };
+
+    if (expApps) {
+      // Respetar la selección individual del panel (si está activo y con apps listadas)
+      const selPanel = document.getElementById('appSelPanel');
+      const selList  = document.getElementById('appSelList');
+      const panelActive = selPanel && !selPanel.classList.contains('hidden')
+        && selList && selList.querySelector('.app-sel-item input[type="checkbox"]');
+
+      let list;
+      if (panelActive) {
+        // Resolver cada checkbox contra el array actual: primero por posición + clave;
+        // si no, por clave respetando el ORDEN de aparición (la k-ésima casilla de
+        // una clave resuelve a la k-ésima app con esa clave), de modo que dos apps
+        // distintas con la misma clave no se resuelvan ambas a la primera.
+        const byKeyMap = new Map();
+        apps.forEach(a => {
+          const k = expAppKey(a);
+          const arr = byKeyMap.get(k);
+          if (arr) arr.push(a); else byKeyMap.set(k, [a]);
+        });
+        const nextByKey = new Map();
+        const claimed = new Set();
+        list = Array.from(selList.querySelectorAll('.app-sel-item input[type="checkbox"]:checked'))
+          .map(cb => {
+            const key = cb.dataset.key || '';
+            const i = parseInt(cb.dataset.i);
+            const byPos = (!isNaN(i) && i >= 0 && i < apps.length) ? apps[i] : null;
+            if (byPos && expAppKey(byPos) === key) { claimed.add(byPos); return byPos; }
+            const arr = byKeyMap.get(key) || [];
+            const start = nextByKey.get(key) || 0;
+            for (let k = start; k < arr.length; k++) {
+              if (!claimed.has(arr[k])) { nextByKey.set(key, k + 1); return arr[k]; }
+            }
+            return byPos; // fallback por posición (p. ej. app renombrada sin reconstruir lista)
+          })
+          .filter(Boolean);
+        if (list.length === 0) {
+          return { error: 'Has marcado exportar «Aplicaciones» pero no hay ninguna seleccionada. Marca al menos una o desmarca esa sección.' };
+        }
+      } else {
+        list = apps.slice();
+      }
+      list.sort((a, b) => {
+        const va = (a.name || '').toString().toLowerCase().trim();
+        const vb = (b.name || '').toString().toLowerCase().trim();
+        return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
+      });
+      data.apps = list.map(a => ({
+        'Nombre':      a.name || '',
+        'Descripción': a.desc || '',
+        'URL':         a.url || '',
+        'Profesorado': a.profesorado ? 'Sí' : 'No',
+        'Gestión':     a.gestion     ? 'Sí' : 'No',
+        'Recursos':    a.recursos    ? 'Sí' : 'No',
+        'IA':          a.ia          ? 'Sí' : 'No'
+      }));
+    }
+
+    if (expAdmins) {
+      data.admins = admins.map(a => ({
+        'Usuario':     a.user || '',
+        'Contraseña':  a.pass || ''
+      }));
+    }
+
+    if (expPass) {
+      data.groupPasswords = [
+        { 'Perfil': 'Profesorado', 'Contraseña': groupPasswords.profesorado || '(vacío)' },
+        { 'Perfil': 'Gestión',     'Contraseña': groupPasswords.gestion     || '(vacío)' },
+        { 'Perfil': 'Recursos',    'Contraseña': groupPasswords.recursos    || '(vacío)' },
+        { 'Perfil': 'IA',          'Contraseña': groupPasswords.ia          || '(vacío)' }
+      ];
+    }
+
+    return data;
+  }
+
+  // Punto de entrada principal: llamado desde el botón "📥 Exportar".
+  async function exportData() {
+    const data = collectExportData();
+    if (data.error) {
+      showToast(data.error, 'err', 4000);
+      return;
+    }
+    try {
+      const formatInput = document.querySelector('input[name="expFormat"]:checked');
+      if (formatInput && formatInput.value === 'pdf') {
+        await exportToPDF(data);
+      } else {
+        await exportToExcel(data);
+      }
+    } catch (e) {
+      console.error('Error al exportar:', e);
+      showToast('Error al generar el archivo: ' + e.message, 'err', 5000);
+    }
+  }
+
+  // ── Exportar a Excel (.xlsx) usando SheetJS ──
+  async function exportToExcel(data) {
+    showToast('Generando Excel…', 'ok', 1500);
+    await loadScript('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
+    const X = window.XLSX;
+    if (!X) throw new Error('SheetJS no disponible');
+
+    const wb = X.utils.book_new();
+
+    if (data.apps && data.apps.length > 0) {
+      const ws = X.utils.json_to_sheet(data.apps);
+      ws['!cols'] = [
+        { wch: 25 },  // Nombre
+        { wch: 45 },  // Descripción
+        { wch: 55 },  // URL
+        { wch: 12 },  // Profesorado
+        { wch: 12 },  // Gestión
+        { wch: 12 },  // Recursos
+        { wch: 8 }    // IA
+      ];
+      X.utils.book_append_sheet(wb, ws, 'Aplicaciones');
+    }
+
+    if (data.admins && data.admins.length > 0) {
+      const ws = X.utils.json_to_sheet(data.admins);
+      ws['!cols'] = [{ wch: 25 }, { wch: 25 }];
+      X.utils.book_append_sheet(wb, ws, 'Administradores');
+    }
+
+    if (data.groupPasswords && data.groupPasswords.length > 0) {
+      const ws = X.utils.json_to_sheet(data.groupPasswords);
+      ws['!cols'] = [{ wch: 20 }, { wch: 30 }];
+      X.utils.book_append_sheet(wb, ws, 'Contraseñas perfiles');
+    }
+
+    // Verificar que al menos haya una hoja con datos (mejora portada de TecDeA)
+    const sheetNames = wb.SheetNames || [];
+    if (sheetNames.length === 0) {
+      throw new Error('No hay datos para exportar. Selecciona al menos una sección.');
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    X.writeFile(wb, `portal-ies-config-${date}.xlsx`);
+    showToast('Excel exportado correctamente.', 'ok', 2500);
+  }
+
+  // ── Exportar a PDF usando jsPDF + autotable ──
+  async function exportToPDF(data) {
+    showToast('Generando PDF…', 'ok', 1500);
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js');
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const NAVY = [11, 37, 69];
+    const GOLD = [200, 168, 75];
+    const pageW = doc.internal.pageSize.width;
+    const pageH = doc.internal.pageSize.height;
+
+    // Cabecera
+    doc.setFillColor(...NAVY);
+    doc.rect(0, 0, pageW, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Portal IES Virgen de Villadiego — Configuración', 14, 14);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Exportado el ${new Date().toLocaleString('es-ES')}`, 14, 19);
+
+    let y = 30;
+
+    function addSectionTitle(title) {
+      // Si no cabe el título + tabla mínima, salto de página
+      if (y > pageH - 30) { doc.addPage(); y = 20; }
+      doc.setTextColor(...NAVY);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      // Línea decorativa dorada a la izquierda
+      doc.setFillColor(...GOLD);
+      doc.rect(14, y - 4, 2, 7, 'F');
+      doc.text(title, 20, y + 2);
+      y += 6;
+    }
+
+    if (data.apps && data.apps.length > 0) {
+      addSectionTitle(`Aplicaciones (${data.apps.length})`);
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.apps[0])],
+        body: data.apps.map(a => Object.values(a)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8, cellPadding: 1.5 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },  // crema
+        columnStyles: {
+          2: { cellWidth: 70 },   // URL más ancha
+        },
+        margin: { left: 14, right: 14 },
+        didDrawPage: () => { y = doc.lastAutoTable.finalY + 8; }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    if (data.admins && data.admins.length > 0) {
+      addSectionTitle(`Administradores (${data.admins.length})`);
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.admins[0])],
+        body: data.admins.map(a => Object.values(a)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },
+        margin: { left: 14, right: 14 }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+    }
+
+    if (data.groupPasswords && data.groupPasswords.length > 0) {
+      addSectionTitle('Contraseñas por perfil');
+      doc.autoTable({
+        startY: y,
+        head: [Object.keys(data.groupPasswords[0])],
+        body: data.groupPasswords.map(g => Object.values(g)),
+        theme: 'striped',
+        headStyles: { fillColor: NAVY, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9, cellPadding: 2 },
+        alternateRowStyles: { fillColor: [247, 244, 239] },
+        margin: { left: 14, right: 14 }
+      });
+    }
+
+    // Pie de página con número de página
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(120);
+      doc.text(`Página ${i} de ${pageCount}`, pageW - 30, pageH - 8);
+      doc.text('Portal IES Virgen de Villadiego', 14, pageH - 8);
+    }
+
+    // Verificar que se generó contenido (mejora portada de TecDeA)
+    const finalPageCount = doc.internal.getNumberOfPages();
+    if (finalPageCount <= 1 && !data.apps?.length && !data.admins?.length && !data.groupPasswords?.length) {
+      // Solo tiene la página de encabezado, sin datos reales
+      showToast('No hay datos para exportar en PDF.', 'err', 4000);
+      return;
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    doc.save(`portal-ies-config-${date}.pdf`);
+    showToast('PDF exportado correctamente.', 'ok', 2500);
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  SELECCIÓN INDIVIDUAL DE APLICACIONES PARA EXPORTAR (mejora portada de TecDeA)
+  // ════════════════════════════════════════════════════════
+
+  // Clave estable de una app para la lista de selección (nombre normalizado | URL normalizada)
+  function expAppKey(a) {
+    return normalizeForComparison(a.name || '') + '|' + normUrlKey(a.url || '');
+  }
+
+  // Normaliza una URL para claves/duplicados (ignora protocolo, www y barras finales)
+  function normUrlKey(u) {
+    if (!u) return '';
+    return String(u).trim().toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/+$/, '');
+  }
+
+  // Perfiles («categorías») e iconos, en el orden del menú principal
+  const EXPORT_PROFILES = [
+    { key: 'profesorado', label: 'Profesorado', icon: '👨‍🏫' },
+    { key: 'gestion',     label: 'Gestión',     icon: '🗂️' },
+    { key: 'recursos',    label: 'Recursos',    icon: '📚' },
+    { key: 'ia',          label: 'IA',          icon: '🤖' }
+  ];
+
+  // Escapa un valor para usarlo como literal de cadena JS dentro de un onclick
+  function jsAttr(s) {
+    return escHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+
+  // Índices (en apps) de las apps de un perfil. Se devuelven ÍNDICES (identidad de
+  // fila) y no claves nombre|URL, para que dos apps distintas con la misma clave
+  // no se afecten entre sí al marcar/desmarcar grupos.
+  function appSelTargetIdx(key) {
+    const out = [];
+    apps.forEach((a, i) => { if (!!a[key]) out.push(i); });
+    return out;
+  }
+
+  // Nº de perfiles a los que pertenece una app: es multi-perfil cuando tiene
+  // marcados 2 o más de los 4 perfiles.
+  function appProfileCount(a) {
+    return (!!a.profesorado ? 1 : 0) + (!!a.gestion ? 1 : 0) +
+           (!!a.recursos ? 1 : 0) + (!!a.ia ? 1 : 0);
+  }
+
+  // Nota explicativa para el title de un chip con apps compartidas entre perfiles
+  function appSelSharedNote(nShared) {
+    return nShared
+      ? ` — ${nShared} también en otro${nShared === 1 ? '' : 's'} ${nShared === 1 ? 'perfil' : 'perfiles'} se mantiene${nShared === 1 ? '' : 'n'} marcada${nShared === 1 ? '' : 's'} al desmarcar`
+      : '';
+  }
+
+  // Índices (data-i) de las apps listadas (solo marcadas si onlyChecked).
+  // Se usa IDENTIDAD de fila (índice en apps) y no la clave nombre|URL para que
+  // dos apps distintas con la misma clave no se contaminen entre sí.
+  function exportCheckedIdx(onlyChecked = true) {
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return new Set();
+    const suf = onlyChecked ? ':checked' : '';
+    return new Set(Array.from(listEl.querySelectorAll(`.app-sel-item input[type="checkbox"]${suf}`))
+      .map(cb => Number(cb.dataset.i)));
+  }
+
+  // Visibilidad de una fila de la lista (afectada por el buscador/filtro de perfil)
+  function exportRowVisible(itemEl) {
+    return !!itemEl && itemEl.style.display !== 'none';
+  }
+
+  // ¿Hay filtro o búsqueda activa? (alguna fila oculta)
+  function exportListFiltered() {
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return false;
+    const rows = listEl.querySelectorAll('.app-sel-item');
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].style.display === 'none') return true;
+    }
+    return false;
+  }
+
+  // Botón-chip de un perfil con contador «seleccionadas/total»
+  function exportCatChip(key, label, icon, checkedIdx) {
+    const idxArr = appSelTargetIdx(key);
+    const nSel = idxArr.reduce((n, i) => n + (checkedIdx.has(i) ? 1 : 0), 0);
+    const total = idxArr.length;
+    const cls = (total && nSel === total) ? 'on' : (nSel > 0 ? 'partial' : '');
+    const nShared = idxArr.filter(i => appProfileCount(apps[i]) >= 2).length;
+    const title = total
+      ? `${label}: ${nSel} de ${total} seleccionadas — clic para ${nSel === total ? 'desmarcar' : 'marcar'}${appSelSharedNote(nShared)}`
+      : `${label}: sin aplicaciones`;
+    return `<button type="button" class="app-sel-chip ${cls}" data-key="${escHtml(key)}" data-label="${escHtml(label)}" title="${escHtml(title)}" onclick="ies.toggleExportCat('${jsAttr(key)}')">${icon ? icon + ' ' : ''}${escHtml(label)} <span class="app-sel-chip-n">${nSel}/${total}</span></button>`;
+  }
+
+  // Pinta los chips de selección por perfil y las opciones del filtro
+  function renderExportCatControls() {
+    const catsBox = document.getElementById('appSelCats');
+    const selEl   = document.getElementById('appSelCatFilter');
+    if (!catsBox || !selEl) return;
+
+    const prevFilter = selEl.value || '';
+    const checkedIdx = exportCheckedIdx(true);
+
+    const profChips = EXPORT_PROFILES
+      .map(p => ({ p, n: apps.filter(a => !!a[p.key]).length }))
+      .filter(({ n }) => n > 0)
+      .map(({ p }) => exportCatChip(p.key, p.label, p.icon, checkedIdx));
+
+    if (!profChips.length) {
+      catsBox.innerHTML = '';
+      catsBox.classList.add('hidden');
+    } else {
+      catsBox.classList.remove('hidden');
+      const nMulti = apps.filter(a => appProfileCount(a) >= 2).length;
+      catsBox.innerHTML = `
+        <div class="app-sel-cats-row">
+          <span class="app-sel-cats-label">Seleccionar por perfil:</span>
+          <div class="app-sel-chips">${profChips.join('')}</div>
+        </div>
+        ${nMulti ? `<div class="app-sel-cats-note">ℹ️ ${nMulti === 1
+          ? 'Hay 1 aplicación que pertenece a varios perfiles: al desmarcar un grupo permanece marcada (quítala con su casilla si no quieres exportarla).'
+          : `Hay ${nMulti} aplicaciones que pertenecen a varios perfiles: al desmarcar un grupo permanecen marcadas (quítalas con su casilla si no quieres exportarlas).`}</div>` : ''}`;
+    }
+
+    const opts = ['<option value="">Filtrar: todas las categorías</option>'];
+    if (profChips.length) {
+      opts.push('<optgroup label="Perfiles">' + EXPORT_PROFILES
+        .filter(p => apps.some(a => !!a[p.key]))
+        .map(p => `<option value="p:${p.key}">${p.icon} ${escHtml(p.label)}</option>`)
+        .join('') + '</optgroup>');
+    }
+    selEl.innerHTML = opts.join('');
+    selEl.value = Array.from(selEl.options).some(o => o.value === prevFilter) ? prevFilter : '';
+  }
+
+  // Refresca contadores y estado visual de los chips sin reconstruirlos.
+  // Con filtro/búsqueda activa, contador y estado se calculan sobre las filas
+  // VISIBLES del grupo (el alcance real del clic); sin filtro, sobre el grupo entero.
+  function refreshExportChipCounts() {
+    const catsBox = document.getElementById('appSelCats');
+    if (!catsBox || catsBox.classList.contains('hidden')) return;
+    const filtered = exportListFiltered();
+    const listEl = document.getElementById('appSelList');
+    const allBoxes = listEl
+      ? Array.from(listEl.querySelectorAll('.app-sel-item input[type="checkbox"]'))
+      : [];
+    catsBox.querySelectorAll('.app-sel-chip[data-key]').forEach(chip => {
+      const idxArr = appSelTargetIdx(chip.dataset.key);
+      const idxSet = new Set(idxArr);
+      const total = idxSet.size;
+      const nShared = idxArr.filter(i => appProfileCount(apps[i]) >= 2).length;
+      const boxes = allBoxes
+        .filter(cb => idxSet.has(Number(cb.dataset.i)))
+        .map(cb => ({ cb, vis: exportRowVisible(cb.closest('.app-sel-item')) }));
+      const scope = filtered ? boxes.filter(b => b.vis) : boxes;
+      const nScope = scope.length;
+      const nSel = scope.reduce((n, b) => n + (b.cb.checked ? 1 : 0), 0);
+      const nEl = chip.querySelector('.app-sel-chip-n');
+      if (nEl) nEl.textContent = `${nSel}/${nScope}`;
+      const noop = nScope === 0;
+      chip.disabled = noop;
+      chip.classList.toggle('noop', noop);
+      chip.classList.toggle('on', !noop && nSel === nScope);
+      chip.classList.toggle('partial', !noop && nSel > 0 && nSel < nScope);
+      const label = chip.dataset.label || '';
+      chip.title = noop
+        ? `${label}: sin aplicaciones visibles con el filtro actual`
+        : `${label}: ${nSel} de ${nScope}${filtered ? ` visibles (${total} en total)` : ''} seleccionadas — clic para ${nSel === nScope ? 'desmarcar' : 'marcar'}${appSelSharedNote(nShared)}`;
+    });
+  }
+
+  // Marca o desmarca (toggle) las apps de un perfil.
+  // Con filtro/búsqueda activa solo afecta a las filas VISIBLES del grupo.
+  // Al DESMARCAR, las apps que además pertenecen a OTRO perfil se mantienen
+  // marcadas: desactivar un grupo (p. ej. «Recursos») nunca desactiva otro
+  // grupo distinto (p. ej. «Gestión»), porque esa app sigue seleccionada por
+  // su otro perfil. Las filas se emparejan por data-i (identidad), no por clave.
+  function toggleExportCat(key) {
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return;
+    const idxSet = new Set(appSelTargetIdx(key));
+    if (!idxSet.size) return;
+    const filtered = exportListFiltered();
+    const inCat = Array.from(listEl.querySelectorAll('.app-sel-item input[type="checkbox"]'))
+      .filter(cb => idxSet.has(Number(cb.dataset.i)))
+      .filter(cb => !filtered || exportRowVisible(cb.closest('.app-sel-item')));
+    if (!inCat.length) return;
+    const allChecked = inCat.every(cb => cb.checked);
+    inCat.forEach(cb => {
+      const a = apps[Number(cb.dataset.i)];
+      // Retención: solo se desmarcan las apps EXCLUSIVAS de este perfil;
+      // las multi-perfil siguen marcadas porque las cubre su otro perfil.
+      cb.checked = allChecked ? !!(a && appProfileCount(a) >= 2) : true;
+    });
+    updateExportSelCount();
+  }
+
+  // Muestra/oculta el panel según el estado del check "Aplicaciones"
+  function syncExportAppPanel() {
+    const expAppsEl = document.getElementById('expApps');
+    const panel = document.getElementById('appSelPanel');
+    if (!expAppsEl || !panel) return;
+    panel.classList.toggle('hidden', !expAppsEl.checked);
+  }
+
+  // Handler del check "Aplicaciones" en la exportación
+  function onExpAppsToggle() {
+    const expAppsEl = document.getElementById('expApps');
+    if (expAppsEl && expAppsEl.checked) {
+      buildExportAppSelection(true);
+    }
+    syncExportAppPanel();
+  }
+
+  // Estado de selección previo de la lista, para preservarlo al reconstruir.
+  // 1) Identidad por posición+clave (refs): fiable cuando en esa posición sigue
+  //    estando la misma app (misma clave nombre|URL), aunque el objeto sea nuevo
+  //    (p. ej. tras «Guardar aplicaciones» se releen los datos de la BD).
+  // 2) Cola por clave (queueByKey): para filas cuya posición ya no coincide
+  //    (lista reordenada al ordenar, filas recortadas al guardar, claves
+  //    duplicadas desalineadas…), la k-ésima aparición de una clave hereda el
+  //    estado de la k-ésima aparición anterior.
+  function captureExportSelectionState() {
+    const st = { checkedRefs: new Set(), allRefs: new Set(), queueByKey: new Map(), rowCount: 0 };
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return st;
+    listEl.querySelectorAll('.app-sel-item input[type="checkbox"]').forEach(cb => {
+      const key = cb.dataset.key || '';
+      const i = Number(cb.dataset.i);
+      const ref = (!isNaN(i) && i >= 0 && i < apps.length) ? apps[i] : null;
+      if (ref && expAppKey(ref) === key) {          // la misma app sigue en esa posición
+        st.allRefs.add(ref);
+        if (cb.checked) st.checkedRefs.add(ref);
+      } else if (key) {                             // posición desalineada → cola por clave
+        const q = st.queueByKey.get(key);
+        if (q) q.push(!!cb.checked); else st.queueByKey.set(key, [!!cb.checked]);
+      }
+      st.rowCount++;
+    });
+    return st;
+  }
+
+  // Decide si una fila reconstruida nace marcada (consume la cola de su clave)
+  function exportRowCheckedState(a, key, st, preserveSelection) {
+    if (!st || st.rowCount === 0 || !preserveSelection) return true; // primera construcción
+    if (st.checkedRefs.has(a)) return true;   // identidad: estaba marcada
+    if (st.allRefs.has(a)) return false;      // identidad: estaba desmarcada
+    const q = st.queueByKey.get(key);
+    if (q && q.length) return q.shift();      // k-ésima aparición de esa clave
+    return true;                              // app nueva (o aparición extra) → marcada
+  }
+
+  // Construye (o reconstruye) la lista de selección de aplicaciones.
+  // preserveSelection: mantiene las marcas anteriores; las apps nuevas se marcan por defecto.
+  function buildExportAppSelection(preserveSelection = true) {
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return;
+
+    // Selección previa capturada del DOM actual
+    const st = preserveSelection ? captureExportSelectionState() : null;
+
+    const indexed = apps.map((a, idx) => ({ a, idx }));
+    indexed.sort((x, y) => {
+      const va = (x.a.name || '').toString().toLowerCase().trim();
+      const vb = (y.a.name || '').toString().toLowerCase().trim();
+      return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
+    });
+
+    if (indexed.length === 0) {
+      listEl.innerHTML = '<div class="app-sel-empty">No hay aplicaciones configuradas.</div>';
+      renderExportCatControls();
+      filterExportAppList();
+      updateExportSelCount();
+      return;
+    }
+
+    listEl.innerHTML = indexed.map(({ a, idx }) => {
+      const key = expAppKey(a);
+      const checked = exportRowCheckedState(a, key, st, preserveSelection);
+      const profiles = EXPORT_PROFILES.filter(p => !!a[p.key]);
+      return `
+        <label class="app-sel-item" data-profiles="${escHtml(profiles.map(p => p.key).join(','))}">
+          <input type="checkbox" data-i="${idx}" data-key="${escHtml(key)}" ${checked ? 'checked' : ''} onchange="ies.updateExportSelCount()">
+          <span class="app-sel-name">${escHtml(a.name || '(sin nombre)')}</span>
+          <span class="app-sel-tags">${profiles.map(p => `<span class="app-sel-tag" title="${escHtml(p.label)}">${p.icon}</span>`).join('')}</span>
+          <span class="app-sel-url">${escHtml(a.url || '')}</span>
+        </label>`;
+    }).join('') + '<div id="appSelNoRes" class="app-sel-empty hidden">Ninguna aplicación coincide con el buscador o el filtro de perfil.</div>';
+
+    renderExportCatControls();
+    filterExportAppList(); // re-aplica el filtro preservado a las filas recién creadas
+    updateExportSelCount();
+  }
+
+  function updateExportSelCount() {
+    const listEl = document.getElementById('appSelList');
+    const countEl = document.getElementById('appSelCount');
+    if (listEl && countEl) {
+      const boxes = listEl.querySelectorAll('.app-sel-item input[type="checkbox"]');
+      const sel = listEl.querySelectorAll('.app-sel-item input[type="checkbox"]:checked');
+      countEl.textContent = `${sel.length} de ${boxes.length}`;
+    }
+    refreshExportChipCounts();
+  }
+
+  // «Todas» / «Ninguna»: con filtro/búsqueda activa solo afecta a las filas visibles
+  function selectAllExportApps(state) {
+    const listEl = document.getElementById('appSelList');
+    if (!listEl) return;
+    const filtered = exportListFiltered();
+    listEl.querySelectorAll('.app-sel-item input[type="checkbox"]').forEach(cb => {
+      if (!filtered || exportRowVisible(cb.closest('.app-sel-item'))) cb.checked = !!state;
+    });
+    updateExportSelCount();
+  }
+
+  function filterExportAppList() {
+    const searchEl = document.getElementById('appSelSearch');
+    const catEl    = document.getElementById('appSelCatFilter');
+    const q  = (searchEl ? searchEl.value : '').toLowerCase().trim();
+    const fv = catEl ? (catEl.value || '') : '';
+    // Búsqueda tolerante a acentos: «matematicas» encuentra «Matemáticas»
+    const stripAccents = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const qn = stripAccents(q);
+    const rows = Array.from(document.querySelectorAll('#appSelList .app-sel-item'));
+    let visible = 0;
+    rows.forEach(it => {
+      const okText = !qn || stripAccents(it.textContent.toLowerCase()).includes(qn);
+      let okCat = true;
+      if (fv.startsWith('p:'))      okCat = (it.dataset.profiles || '').split(',').includes(fv.slice(2));
+      const show = okText && okCat;
+      it.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const noRes = document.getElementById('appSelNoRes');
+    if (noRes) noRes.classList.toggle('hidden', visible > 0);
+    // Nota de alcance: los botones masivos y chips actúan solo sobre lo visible
+    const note = document.getElementById('appSelScopeNote');
+    if (note) note.classList.toggle('hidden', visible === rows.length);
+    // Los chips cambian de alcance/estado cuando el filtro cambia
+    refreshExportChipCounts();
+  }
+
+  // ════════════════════════════════════════════════════════
+  //  IMPORTACIÓN MASIVA DE APLICACIONES (desde .xlsx exportado — mejora TecDeA)
+  // ════════════════════════════════════════════════════════
+
+  let _importCandidates = null;
+
+  function parseImportBool(v) {
+    if (v === true || v === 1) return true;
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    return ['sí', 'si', 'yes', 'true', 'x', '1', 'verdadero'].includes(s);
+  }
+
+  // Busca el valor de un campo de fila tolerando variaciones del encabezado
+  // (acentos, mayúsculas y espacios: «Herramientas Tecno» ≡ «HerramientasTecno»).
+  // Se acepta también la columna antigua «Administrativa» por compatibilidad.
+  function pickImportField(row, ...names) {
+    const keys = Object.keys(row);
+    const normHeader = s => normalizeForComparison(s).replace(/\s+/g, '');
+    for (const n of names) {
+      const target = normHeader(n);
+      const key = keys.find(k => normHeader(k) === target);
+      if (key !== undefined) {
+        const v = row[key];
+        if (v !== undefined && v !== '') return v;
+      }
+    }
+    return '';
+  }
+
+  // Clasifica cada fila del archivo: nueva / duplicada / inválida
+  function analyzeImportRows(rows) {
+    const existing = apps
+      .map(a => ({
+        nameKey: normalizeForComparison(a.name || ''),
+        urlKey:  normUrlKey(a.url || ''),
+        name:    a.name || ''
+      }))
+      .filter(e => e.nameKey || e.urlKey);
+
+    const seenNameKeys = new Set();
+    const seenUrlKeys  = new Set();
+
+    return rows.map((r, i) => {
+      const cand = {
+        id: i,
+        name: String(r.name || '').trim(),
+        desc: String(r.desc || '').trim(),
+        url:  String(r.url || '').trim(),
+        profesorado: !!r.profesorado,
+        gestion: !!r.gestion,
+        recursos: !!r.recursos,
+        ia: !!r.ia,
+        status: 'new',
+        dupOf: ''
+      };
+      const nameKey = normalizeForComparison(cand.name);
+      const urlKey  = normUrlKey(cand.url);
+
+      if (!cand.name || !cand.url) {
+        cand.status = 'invalid';
+      } else {
+        const hit = existing.find(e =>
+          (nameKey && e.nameKey === nameKey) ||
+          (urlKey && e.urlKey && e.urlKey === urlKey));
+        if (hit) {
+          cand.status = 'dup';
+          cand.dupOf = hit.name || 'app existente';
+        } else if (seenNameKeys.has(nameKey) || (urlKey && seenUrlKeys.has(urlKey))) {
+          cand.status = 'dup';
+          cand.dupOf = 'repetida en el archivo';
+        } else {
+          seenNameKeys.add(nameKey);
+          if (urlKey) seenUrlKeys.add(urlKey);
+        }
+      }
+      return cand;
+    });
+  }
+
+  function onImportFileSelected() {
+    const fi = document.getElementById('importFile');
+    const fn = document.getElementById('importFileName');
+    if (!fi || !fn) return;
+    const f = fi.files && fi.files[0];
+    fn.textContent = f ? f.name : 'Ningún archivo seleccionado';
+    _importCandidates = null; // invalida el análisis previo si cambia el archivo
+  }
+
+  async function analyzeImportFile() {
+    const fi = document.getElementById('importFile');
+    const file = fi && fi.files && fi.files[0];
+    if (!file) {
+      showToast('Selecciona primero un archivo Excel (.xlsx).', 'err', 4000);
+      return;
+    }
+    if (!/\.(xlsx|xlsm)$/i.test(file.name)) {
+      showToast('El archivo debe ser un Excel .xlsx (como el generado por «Exportar datos»).', 'err', 5000);
+      return;
+    }
+    showToast('Analizando archivo…', 'ok', 1500);
+    try {
+      await loadScript('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
+      const X = window.XLSX;
+      if (!X) throw new Error('SheetJS no disponible');
+
+      const buf = await file.arrayBuffer();
+      const wb = X.read(buf, { type: 'array' });
+      const names = wb.SheetNames || [];
+      const target = names.find(n => normalizeForComparison(n) === 'aplicaciones')
+        || (names.length === 1 ? names[0] : null);
+      if (!target) {
+        throw new Error('No se encontró la hoja «Aplicaciones». Hojas del archivo: ' + names.join(', '));
+      }
+
+      const rawRows = X.utils.sheet_to_json(wb.Sheets[target], { defval: '' });
+      if (!rawRows.length) throw new Error('La hoja «Aplicaciones» no contiene filas.');
+
+      const parsed = rawRows.map(r => ({
+        name: String(pickImportField(r, 'Nombre', 'name') || ''),
+        desc: String(pickImportField(r, 'Descripción', 'Descripcion', 'desc') || ''),
+        url:  String(pickImportField(r, 'URL', 'url', 'Enlace') || ''),
+        profesorado: parseImportBool(pickImportField(r, 'Profesorado', 'Prof.')),
+        gestion:     parseImportBool(pickImportField(r, 'Gestión', 'Gestion', 'Gest.')),
+        recursos:    parseImportBool(pickImportField(r, 'Recursos', 'Rec.', 'Administrativa', 'Adm.')),
+        ia:          parseImportBool(pickImportField(r, 'IA'))
+      }));
+
+      _importCandidates = analyzeImportRows(parsed);
+      openImportModal();
+    } catch (e) {
+      console.error('[Portal IES] Error al analizar el archivo de importación:', e);
+      showToast('Error al analizar el archivo: ' + e.message, 'err', 7000);
+    }
+  }
+
+  function importPerfilesLabel(c) {
+    const parts = [];
+    if (c.profesorado) parts.push('Profesorado');
+    if (c.gestion) parts.push('Gestión');
+    if (c.recursos) parts.push('Recursos');
+    if (c.ia) parts.push('IA');
+    return parts.length ? parts.join(' · ') : '— ninguno —';
+  }
+
+  function openImportModal() {
+    renderImportPreview();
+    const m = document.getElementById('importModal');
+    if (m) m.classList.remove('hidden');
+  }
+
+  function closeImportModal() {
+    const m = document.getElementById('importModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderImportPreview() {
+    const body = document.getElementById('importPreviewBody');
+    const sum  = document.getElementById('importSummary');
+    if (!body || !_importCandidates) return;
+
+    const news   = _importCandidates.filter(c => c.status === 'new');
+    const dups   = _importCandidates.filter(c => c.status === 'dup');
+    const invals = _importCandidates.filter(c => c.status === 'invalid');
+
+    sum.innerHTML =
+      `Se han detectado <strong>${news.length}</strong> aplicación(es) nueva(s), ` +
+      `<strong>${dups.length}</strong> duplicada(s) y <strong>${invals.length}</strong> inválida(s) (sin nombre o URL). ` +
+      `Las duplicadas se omitirán automáticamente para evitar repeticiones en la base de datos.`;
+
+    body.innerHTML = _importCandidates.map(c => {
+      const rowCls = c.status === 'dup' ? 'imp-row-dup' : (c.status === 'invalid' ? 'imp-row-inv' : 'imp-row-new');
+      const badge = c.status === 'new'
+        ? '<span class="imp-badge imp-badge-ok">✅ Nueva</span>'
+        : c.status === 'dup'
+          ? '<span class="imp-badge imp-badge-dup">⚠️ Duplicada</span>'
+          : '<span class="imp-badge imp-badge-inv">❌ Inválida</span>';
+      const dupOf = c.dupOf ? `<span class="imp-dupof">↳ coincide con «${escHtml(c.dupOf)}»</span>` : '';
+      const chk = c.status === 'new'
+        ? `<input type="checkbox" data-cid="${c.id}" checked onchange="ies.updateImportConfirmBtn()">`
+        : '<input type="checkbox" disabled>';
+      return `
+        <tr class="${rowCls}">
+          <td>${chk}</td>
+          <td><span class="imp-name">${escHtml(c.name || '(sin nombre)')}</span><br><span class="imp-url">${escHtml(c.desc || '')}</span></td>
+          <td><span class="imp-url">${escHtml(c.url || '—')}</span></td>
+          <td><span class="imp-perfiles">${importPerfilesLabel(c)}</span></td>
+          <td>${badge}${dupOf}</td>
+        </tr>`;
+    }).join('');
+
+    updateImportConfirmBtn();
+  }
+
+  function updateImportConfirmBtn() {
+    const btn = document.getElementById('importConfirmBtn');
+    if (!btn || !_importCandidates) return;
+    const n = _importCandidates.filter(c => {
+      if (c.status !== 'new') return false;
+      const cb = document.querySelector(`#importPreviewBody input[data-cid="${c.id}"]`);
+      return cb && cb.checked;
+    }).length;
+    btn.textContent = `📥 Importar seleccionadas (${n})`;
+    btn.disabled = n === 0;
+  }
+
+  async function confirmImport() {
+    if (!_importCandidates) { closeImportModal(); return; }
+
+    const toImport = _importCandidates.filter(c => {
+      if (c.status !== 'new') return false;
+      const cb = document.querySelector(`#importPreviewBody input[data-cid="${c.id}"]`);
+      return cb && cb.checked;
+    });
+
+    if (toImport.length === 0) {
+      showToast('No hay aplicaciones nuevas seleccionadas para importar.', 'err', 4000);
+      return;
+    }
+
+    const imported = toImport.map(c => ({
+      name: c.name,
+      desc: c.desc,
+      url:  c.url,
+      profesorado: c.profesorado,
+      gestion: c.gestion,
+      recursos: c.recursos,
+      ia: c.ia
+    }));
+
+    apps = apps.concat(imported);
+    const ok = await saveApps();
+    if (!ok) {
+      showToast('Error al guardar en Firebase. No se ha importado nada.', 'err', 7000);
+      return;
+    }
+    _lastSavedAppsJson = JSON.stringify(apps);
+
+    const omitted = _importCandidates.length - imported.length;
+    closeImportModal();
+    showToast(`✓ Importadas ${imported.length} aplicación(es). Omitidas (duplicadas/inválidas): ${omitted}.`, 'ok', 7000);
+
+    // Refrescar tabla de configuración y lista de selección de exportación
+    buildConfigTable();
+    buildExportAppSelection(true);
+
+    // Reset del formulario de importación
+    _importCandidates = null;
+    const fi = document.getElementById('importFile');
+    if (fi) fi.value = '';
+    const fn = document.getElementById('importFileName');
+    if (fn) fn.textContent = 'Ningún archivo seleccionado';
+  }
+
+  // ── Utilidades ────────────────────────────────────────
+  function setView(id) {
+    ["home","group","config"].forEach(v =>
+      document.getElementById("view-" + v).classList.toggle("hidden", v !== id));
+    // Limpiar modal de descripción al cambiar de vista (evita que quede flotando)
+    const descModal = document.getElementById("descModal");
+    if (descModal && !descModal.classList.contains("hidden")) {
+      descModal.classList.add("hidden");
+    }
+  }
+
+  function escHtml(s) {
+    return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  // variant: "" (default) | "ok" (verde, ✓) | "err" (rojo, ✕)
+  // duration: ms (default 3000)
+  // Mejora portada de TecDeA: contador/ID para evitar solapamiento de toasts y
+  // fallback a alert si no existiera el elemento toast.
+  let _toastCounter = 0;
+
+  function showToast(msg, variant = "", duration = 3000) {
+    const t = document.getElementById("toast");
+    if (!t) {
+      console.warn('[Portal IES] Elemento toast no encontrado');
+      alert(msg); // Fallback si no hay toast
+      return;
+    }
+
+    // Incrementar contador y usar ID único para este toast
+    const toastId = ++_toastCounter;
+    t._currentToastId = toastId;
+
+    t.textContent = msg;
+    t.className   = "toast" + (variant ? " " + variant : "");
+    t.classList.remove("hidden");
+    clearTimeout(t._timer);
+
+    t._timer = setTimeout(() => {
+      // Solo ocultar si es el mismo toast (no uno más reciente)
+      if (t._currentToastId === toastId) {
+        t.classList.add("hidden");
+      }
+    }, duration);
+  }
+
+  // ── Modal de descripción (hover / tap) ────────────────
+  let descHideTimer = null;
+
+  // ── Modal de descripción: sigue al ratón en desktop ──
+  const _mousePos = { x: 0, y: 0 };
+  document.addEventListener('mousemove', (e) => {
+    _mousePos.x = e.clientX;
+    _mousePos.y = e.clientY;
+    const modal = document.getElementById('descModal');
+    if (modal && !modal.classList.contains('hidden') && window.matchMedia('(hover: hover)').matches && window.innerWidth >= 768) {
+      updateDescModalPosition();
+    }
+  });
+
+  function showDescModal(text) {
+    clearTimeout(descHideTimer);
+    if (!text || !text.trim()) return;
+    const modal = document.getElementById("descModal");
+    document.getElementById("descModalText").textContent = text;
+    modal.classList.remove("hidden");
+    updateDescModalPosition();
+  }
+
+  // Posiciona el modal EXACTO en el punto donde está el ratón.
+  // IMPORTANTE: se establece top/left en el contenedor externo #descModal
+  // (que tiene position:fixed), no en el .desc-modal-box interno (que no
+  // tiene position y por tanto top/left no tendrían efecto).
+  function updateDescModalPosition() {
+    const modal = document.getElementById('descModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    if (vw < 768) {
+      // Móvil: centrado en pantalla
+      modal.style.top  = "50%";
+      modal.style.left = "50%";
+      modal.style.transform = "translate(-50%, -50%)";
+      modal.style.maxWidth = "85vw";
+      modal.style.width = "auto";
+    } else {
+      // Desktop: en el punto donde está el ratón
+      const modalW = 320;
+      const estH = 160;
+      let top  = _mousePos.y + 20;
+      let left = _mousePos.x + 20;
+      // Si se sale por la derecha, colocar a la izquierda del cursor
+      if (left + modalW > vw - 8) left = _mousePos.x - modalW - 20;
+      // Si se sale por abajo, colocar arriba del cursor
+      if (top + estH > vh - 8) top = _mousePos.y - estH - 20;
+      if (top < 8) top = 8;
+      if (left < 8) left = 8;
+      modal.style.transform = "none";
+      modal.style.maxWidth = modalW + "px";
+      modal.style.width = "auto";
+      modal.style.top  = top + "px";
+      modal.style.left = left + "px";
+    }
+  }
+
+  function hideDescModal(immediate = false) {
+    if (immediate) {
+      clearTimeout(descHideTimer);
+      document.getElementById("descModal").classList.add("hidden");
+      return;
+    }
+    descHideTimer = setTimeout(() => {
+      document.getElementById("descModal").classList.add("hidden");
+    }, 180);
+  }
+
+  // Cerrar modales al hacer clic fuera o tocar fuera en móvil
+  document.addEventListener("click", (e) => {
+    if (window.innerWidth < 768 && !e.target.closest(".desc-modal-box") && !e.target.closest(".desc-fi")) {
+      const dm = document.getElementById("descModal");
+      if (dm) dm.classList.add("hidden");
+    }
+    // Cerrar cualquier modal al hacer clic en el fondo
+    if (e.target.classList && e.target.classList.contains("modal-bg")) {
+      e.target.classList.add("hidden");
+    }
+  });
+
+  // Cerrar modales con tecla Escape (con limpieza de estado — mejora TecDeA)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      // Cerrar con limpieza de estado (pendingGroup, etc.), no solo ocultando
+      const gp = document.getElementById("groupPassModal");
+      if (gp && !gp.classList.contains("hidden")) closeGroupPassModal();
+      const im = document.getElementById("importModal");
+      if (im && !im.classList.contains("hidden")) closeImportModal();
+      document.querySelectorAll(".modal-bg:not(.hidden)").forEach(m => m.classList.add("hidden"));
+      const dm = document.getElementById("descModal");
+      if (dm) dm.classList.add("hidden");
+    }
+  });
+
+  // ════════════════════════════════════════════════════════
+  //  ACORDEONES de la pantalla de Configuración
+  // ════════════════════════════════════════════════════════
+  // - Todos los acordeones están inicialmente replegados.
+  // - Solo puede haber UNO abierto a la vez: al abrir uno, se cierra
+  //   cualquier otro que estuviera desplegado.
+  // - Al pulsar de nuevo sobre un acordeón abierto, se repliega.
+
+  function toggleAccordion(id) {
+    const target = document.querySelector(`.accordion[data-acc="${id}"]`);
+    if (!target) return;
+    const isOpen = target.classList.contains('open');
+
+    // Cerrar todos los acordeones abiertos
+    document.querySelectorAll('.accordion.open').forEach(acc => {
+      acc.classList.remove('open');
+      const icon = acc.querySelector('.acc-icon');
+      if (icon) icon.style.transform = '';
+    });
+
+    // Si el objetivo no estaba abierto, abrirlo (efecto acordeón exclusivo)
+    if (!isOpen) {
+      target.classList.add('open');
+      const icon = target.querySelector('.acc-icon');
+      if (icon) icon.style.transform = 'rotate(180deg)';
+
+      // Al abrir el acordeón de Exportar, refrescar el panel de selección
+      // de aplicaciones (mejora portada de TecDeA)
+      if (id === 'export') {
+        buildExportAppSelection(true);
+        syncExportAppPanel();
+      }
+    }
+  }
+
+  // ── Exponemos al HTML ──────────────────────────────────
+  window.ies = {
+    requestGroupAccess, closeGroupPassModal, doGroupLogin,
+    showGroup, showLoginModal, closeLoginModal, doLogin,
+    showAboutModal, closeAboutModal,
+    renderHome, renderConfig, saveConfig,
+    // Alta de aplicaciones vía modal (sustituye al antiguo addAppRow)
+    showAddAppModal, closeAddAppModal, confirmAddApp,
+    addAppNameInput, addAppFormChanged,
+    addAdminRow, saveAdminsConfig,
+    saveGroupPasswordsConfig,
+    hideDescModal, iconFallback,
+    sortApps, setAppsFilter,
+    exportData,
+    toggleAccordion,
+    // Detección de duplicados
+    findSimilarApps,
+    validateAppName,
+    // Selección individual de aplicaciones para exportar
+    onExpAppsToggle, buildExportAppSelection, selectAllExportApps,
+    filterExportAppList, updateExportSelCount, toggleExportCat,
+    // Importación masiva de aplicaciones
+    onImportFileSelected, analyzeImportFile, closeImportModal,
+    confirmImport, updateImportConfirmBtn
+  };
+
+  // ── Arranque ──────────────────────────────────────────
+  loadData();
+
+  // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
+  ['passProfesorado', 'passGestion', 'passRecursos', 'passIa'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) {
+      inp.addEventListener('change', () => autoSaveGroupPasswords());
+      inp.addEventListener('blur',   () => autoSaveGroupPasswords());
+    }
+  });
+</script>
+
+<style>
+  /* ══ Reset & variables ══════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:   #0b2545;
+    --gold:   #c8a84b;
+    --gold2:  #e8c96a;
+    --cream:  #f7f4ef;
+    --white:  #ffffff;
+    --text:   #1a1a2e;
+    --muted:  #6b7280;
+    --danger: #c0392b;
+    --radius: 14px;
+    --shadow: 0 4px 24px rgba(11,37,69,.15);
+    --safe-top:    env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left:   env(safe-area-inset-left, 0px);
+    --safe-right:  env(safe-area-inset-right, 0px);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .hidden { display: none !important; }
+
+  /* ══ Utilidades accesibilidad (mejora portada de TecDeA) ═════ */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Focus visible para navegación por teclado */
+  :focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Modo alto contraste */
+  @media (prefers-contrast: high) {
+    :root {
+      --navy: #000000;
+      --gold: #FFD700;
+      --gold2: #FFEA80;
+      --shadow: 0 4px 24px rgba(0,0,0,.4);
+    }
+  }
+
+  /* ══ Topbar ═════════════════════════════════════════ */
+  header {
+    background: var(--navy);
+    color: var(--white);
+    padding: .75rem 1rem;
+    padding-top: calc(.75rem + var(--safe-top));
+    padding-left: calc(1rem + var(--safe-left));
+    padding-right: calc(1rem + var(--safe-right));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
+    position: sticky; top: 0; z-index: 100;
+    gap: .75rem;
+  }
+  header h1 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  header .subtitle {
+    font-size: .72rem;
+    color: var(--gold2);
+    margin-top: 1px;
+  }
+
+  .btn-config {
+    background: transparent;
+    border: 1.5px solid var(--gold);
+    color: var(--gold2);
+    padding: .45rem .85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    transition: background .2s, color .2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 40px;
+    display: inline-flex; align-items: center;
+  }
+  .btn-config:hover { background: var(--gold); color: var(--navy); }
+  .btn-config:active { background: var(--gold); color: var(--navy); transform: scale(.96); }
+
+  /* Botón ⚠ de información junto a «Configuración» (mejora portada de TecDeA) */
+  .header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+  }
+  .btn-about {
+    background: transparent;
+    border: 1.5px solid var(--gold);
+    color: var(--gold2);
+    width: 40px; height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .2s, transform .2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    flex-shrink: 0;
+  }
+  .btn-about:hover  { background: var(--gold); transform: scale(1.05); }
+  .btn-about:active { background: var(--gold); transform: scale(.94); }
+
+  /* ══ Main wrapper ═══════════════════════════════════ */
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+    padding-bottom: calc(3rem + var(--safe-bottom));
+    width: 100%;
+  }
+
+  /* ══ Home ═══════════════════════════════════════════ */
+  #view-home { text-align: center; }
+
+  /* ── ESCUDO: +50% sobre la versión anterior ── */
+  .shield-wrap {
+    margin: 1.5rem auto 1.8rem;
+    width: 300px; height: 300px;                /* +50% (era 200px) */
+    background: var(--white);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 9px var(--gold), var(--shadow);   /* +50% (era 6px) */
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .shield-wrap img {
+    width: 255px; height: 255px;                /* +50% (era 170px) */
+    object-fit: contain;
+  }
+
+  .home-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: .25rem;
+  }
+  .home-sub {
+    font-size: .9rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    padding: 0 .5rem;
+    line-height: 1.5;
+  }
+
+  .main-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0 .25rem;
+  }
+
+  .main-btn {
+    background: var(--navy);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius);
+    padding: 1.3rem 1.6rem;
+    cursor: pointer;
+    font-size: .95rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    min-width: 140px;
+    flex: 1 1 140px;
+    max-width: 200px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .18s, box-shadow .18s;
+    box-shadow: var(--shadow);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: inherit;
+    /* Centrado robusto del contenido (icono + texto) */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .main-btn::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--gold);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .main-btn .btn-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: .4rem;
+    /* Evitar que el emoji empuje el ancho del botón */
+    line-height: 1;
+  }
+  .main-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 32px rgba(11,37,69,.25);
+  }
+  .main-btn:active { transform: translateY(0) scale(.97); }
+
+  /* ══ Group view ═════════════════════════════════════ */
+  #view-group {}
+
+  /* ══ Botón Volver - Diseño Responsive ═════════════ */
+
+  /* Estilos base comunes */
+  .back-btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: var(--navy);
+    color: var(--white);
+    border: none; cursor: pointer;
+    font-size: .88rem; font-weight: 600;
+    padding: .6rem 1.1rem .6rem .9rem;
+    border-radius: 25px;
+    box-shadow: 0 4px 16px rgba(11,37,69,.35), 0 2px 6px rgba(0,0,0,.15);
+    transition: transform .18s, box-shadow .18s, background .18s, color .18s, opacity .2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 42px;
+    letter-spacing: .02em;
+    text-decoration: none;
+    user-select: none;
+    -webkit-user-select: none;
+
+    /* Asegurar visibilidad */
+    background: linear-gradient(135deg, #0b2545 0%, #1a3a5c 100%);
+    border: 1.5px solid rgba(200,168,75,.4);
+
+    opacity: 0.95;
+  }
+
+  /* Cuando el botón Volver está activo/visible, asegurar máxima visibilidad */
+  .back-btn:hover,
+  .back-btn:focus {
+    opacity: 1;
+  }
+
+  /* ═══ Pantallas GRANDES (≥768px): Botón FLOTANTE CENTRADO ═══ */
+  @media (min-width: 768px) {
+    .back-btn {
+      position: fixed;
+      top: 50%;
+      right: 1rem;
+      transform: translateY(-50%);
+      z-index: 1000;
+      writing-mode: horizontal-tb;
+      box-shadow:
+        0 0 0 1px rgba(200,168,75,.3),
+        0 6px 24px rgba(11,37,69,.45),
+        0 3px 12px rgba(0,0,0,.2);
+    }
+
+    .back-btn:hover {
+      transform: translateY(-50%) scale(1.05);
+      box-shadow:
+        0 0 0 1px rgba(200,168,75,.6),
+        0 8px 32px rgba(200,168,75,.4),
+        0 4px 16px rgba(0,0,0,.25);
+    }
+
+    .back-btn::before {
+      content: "\21BA";
+      font-size: 1.2rem;
+      display: block;
+      margin: 0 0 .15rem 0;
+      transition: transform .3s ease-in-out;
+    }
+
+    .back-btn:hover::before {
+      transform: rotate(-180deg);
+    }
+
+    @keyframes backBtnSlideIn {
+      from { opacity: 0; transform: translateY(-50%) translateX(20px); }
+      to   { opacity: 0.95; transform: translateY(-50%) translateX(0); }
+    }
+
+    .back-btn {
+      animation: backBtnSlideIn .3s ease-out;
+    }
+
+    /* Ocultar los contenedores originales en pantallas grandes */
+    .back-row,
+    .config-header {
+      padding-top: 0 !important;
+    }
+  }
+
+  /* ═══ Pantallas PEQUEÑAS (<768px): Botón ESTÁTICO AL FINAL ═══ */
+  @media (max-width: 767px) {
+    .back-btn {
+      position: static;
+      transform: none;
+      margin-top: 1.5rem;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 280px;
+      justify-content: center;
+      border-radius: 30px;
+      padding: .7rem 1.5rem;
+    }
+
+    .back-btn::before {
+      content: "\21BA";
+      font-size: 1rem;
+      margin-right: .3rem;
+      margin-bottom: 0;
+    }
+
+    .back-btn:hover::before {
+      transform: rotate(-180deg);
+      transition: transform .3s ease-in-out;
+    }
+
+    .back-btn:hover {
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .back-row {
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem 0 1rem;
+      margin-top: auto;
+      border-top: 1px solid rgba(11,37,69,.08);
+    }
+
+    .config-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+      padding: 1rem 0 .5rem;
+    }
+
+    .config-title {
+      text-align: center;
+    }
+
+    /* ═══ CUADRÍCULA 2x2 PARA BOTONES EN PANTALLAS PEQUEÑAS ═══ */
+    .main-buttons {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .7rem;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .main-btn {
+      padding: .75rem .6rem !important;
+      min-width: unset !important;
+      max-width: none !important;
+      flex-direction: column;
+      gap: .3rem;
+      font-size: .82rem !important;
+    }
+    .main-btn .btn-icon { font-size: 1.6rem; margin-bottom: 0; }
+
+    @keyframes backBtnFadeInMobile {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 0.95; transform: translateY(0); }
+    }
+
+    .back-btn {
+      animation: backBtnFadeInMobile .25s ease-out;
+    }
+  }
+
+  .group-heading {
+    font-size: 1.3rem; font-weight: 700;
+    color: var(--navy);
+    border-left: 4px solid var(--gold);
+    padding-left: .75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 1rem;
+  }
+
+  .app-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.1rem .6rem .9rem;
+    display: flex; flex-direction: column;
+    align-items: center; gap: .55rem;
+    text-decoration: none; color: var(--text);
+    text-align: center;
+    transition: transform .18s, box-shadow .18s;
+    border: 1.5px solid transparent;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 0;
+  }
+  .app-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 28px rgba(11,37,69,.18);
+    border-color: var(--gold);
+  }
+  .app-card:active { transform: scale(.96); }
+
+  .app-card-icon-wrap {
+    width: 72px; height: 72px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .app-card-icon-wrap img {
+    width: 72px; height: 72px;
+    object-fit: contain;
+    border-radius: 12px;
+  }
+
+  .app-card-name {
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.3;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .empty {
+    color: var(--muted); font-size: .9rem; padding: 1.5rem 0;
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  /* ══ Config view ════════════════════════════════════ */
+  .config-header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    gap: .75rem; margin-bottom: 1.5rem;
+  }
+  .config-header .back-btn { margin-bottom: 0; }
+  .config-title { font-size: 1.3rem; font-weight: 700; color: var(--navy); }
+
+  /* Contenedor para el botón Volver en vistas sin título (grupo) */
+  .back-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 1.5rem;
+  }
+  .back-row .back-btn { margin-bottom: 0; }
+
+  .section-box {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .section-box h3 {
+    font-size: 1rem; font-weight: 700; color: var(--navy);
+    margin-bottom: 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid var(--gold);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     ACORDEONES — secciones plegables de Configuración
+     ════════════════════════════════════════════════════════ */
+  .accordion {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+    border: 1px solid transparent;
+    transition: border-color .18s ease;
+  }
+  .accordion.open {
+    border-color: var(--gold);
+  }
+
+  .acc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: var(--navy);
+    color: var(--white);
+    border: none;
+    cursor: pointer;
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: inherit;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 56px;
+    transition: background .18s ease;
+  }
+  .acc-header:hover {
+    background: #143869;
+  }
+  .acc-header:active {
+    background: #1a4276;
+  }
+  .accordion.open .acc-header {
+    border-bottom: 2px solid var(--gold);
+  }
+
+  .acc-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    line-height: 1.2;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .acc-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--gold2);
+    flex-shrink: 0;
+    transition: transform .25s ease;
+    transform-origin: center;
+  }
+
+  .acc-content {
+    /* Replegado por defecto */
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .35s ease;
+    padding: 0 1.25rem;
+    /* Cuando se abra, anima a un max-height grande */
+  }
+  .accordion.open .acc-content {
+    max-height: 4000px;       /* suficiente para la sección más grande */
+    padding: 1.25rem;
+    transition: max-height .5s ease, padding .25s ease;
+  }
+
+  /* Ajustes responsive de los acordeones en móvil */
+  @media (max-width: 767px) {
+    .acc-header {
+      padding: .85rem 1rem;
+      font-size: .92rem;
+      min-height: 48px;
+    }
+    .accordion.open .acc-content {
+      padding: 1rem;
+    }
+    .acc-content {
+      padding: 0 1rem;
+    }
+  }
+
+  /* ══ Tablas (desktop) → Tarjetas (móvil) ══════════ */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  table#appsTable,
+  table#adminsTable {
+    width: 100%; border-collapse: collapse; font-size: .85rem;
+    table-layout: auto;
+  }
+  table#appsTable th,
+  table#adminsTable th {
+    background: var(--navy); color: var(--white);
+    padding: .55rem .6rem; text-align: center; font-weight: 600;
+    white-space: nowrap;
+  }
+  table#appsTable th:first-child,
+  table#adminsTable th:first-child { text-align: left; border-radius: var(--radius) 0 0 0; }
+  table#appsTable th:last-child,
+  table#adminsTable th:last-child  { border-radius: 0 var(--radius) 0 0; }
+
+  table#appsTable td,
+  table#adminsTable td {
+    padding: .45rem .5rem;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+  }
+  table#appsTable tr:hover td,
+  table#adminsTable tr:hover td { background: #f0f4ff; }
+
+  /* ══ Filas alternadas (zebra striping) para mejor legibilidad ═══ */
+  table#appsTable tbody tr.row-even td {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  table#appsTable tbody tr.row-odd td {
+    background: linear-gradient(to right, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+    border-bottom: 1px solid #94a3b8;
+  }
+  /* Efecto hover que funciona sobre las filas alternadas */
+  table#appsTable tbody tr.row-even:hover td,
+  table#appsTable tbody tr.row-odd:hover td {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-bottom-color: #93c5fd;
+  }
+  /* En móvil (tarjetas), las filas alternadas se aplican al tr completo */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-even { background: var(--white); }
+    table#appsTable tr.row-odd {
+      background: linear-gradient(to right, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+    }
+    table#appsTable tr.row-even:hover,
+    table#appsTable tr.row-odd:hover {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    }
+  }
+  @media (min-width: 401px) and (max-width: 599px) {
+    table#appsTable tr.row-even { background: var(--white); }
+    table#appsTable tr.row-odd {
+      background: linear-gradient(to right, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+    }
+    table#appsTable tr.row-even:hover,
+    table#appsTable tr.row-odd:hover {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    }
+  }
+
+  /* ══ Fila sin categoría: resaltado de advertencia ═══ */
+  table#appsTable tbody tr.row-uncategorized td {
+    background: linear-gradient(to right, #fef2f2 0%, #fee2e2 50%, #fef2f2 100%) !important;
+    border-bottom: 1px solid #fca5a5 !important;
+  }
+  table#appsTable tbody tr.row-uncategorized:hover td {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+    border-bottom-color: #f87171 !important;
+  }
+  table#appsTable tbody tr.row-uncategorized {
+    animation: uncategorizedPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes uncategorizedPulse {
+    0%, 100% { box-shadow: inset 4px 0 0 #ef4444; }
+    50%      { box-shadow: inset 4px 0 0 #f97316; }
+  }
+  /* En móvil (tarjetas) */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-uncategorized {
+      background: linear-gradient(to right, #fef2f2 0%, #fee2e2 50%, #fef2f2 100%) !important;
+      outline: 2.5px solid #ef4444;
+      outline-offset: -1px;
+      border-radius: 12px;
+    }
+  }
+
+  .chk { text-align: center; }
+  .fi {
+    width: 100%; border: 1.5px solid #d1d5db;
+    border-radius: 7px; padding: .4rem .55rem;
+    font-size: .85rem;
+    transition: border-color .15s;
+    min-height: 40px;
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+  }
+  .fi:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(11,37,69,.15); }
+  .url-fi { min-width: 180px; }
+
+  /* ── Input de URL con prefijo fijo ── */
+  .url-cell { min-width: 280px; }
+  .url-input-group {
+    display: flex;
+    align-items: stretch;
+    border: 1.5px solid #d1d5db;
+    border-radius: 7px;
+    overflow: hidden;
+    min-height: 40px;
+    transition: border-color .15s, box-shadow .15s;
+    background: #fff;
+  }
+  .url-input-group:focus-within {
+    border-color: var(--navy);
+    box-shadow: 0 0 0 2px rgba(11,37,69,.15);
+  }
+  .url-prefix {
+    background: #f3f4f6;
+    color: #6b7280;
+    padding: .4rem .55rem;
+    font-size: .8rem;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    border-right: 1px solid #d1d5db;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .url-path-input {
+    border: none !important;
+    border-radius: 0 !important;
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .85rem;
+    min-height: 40px;
+    padding: .4rem .55rem;
+    background: #fff;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+  }
+  .url-path-input:focus {
+    outline: none;
+    box-shadow: none !important;
+  }
+
+  /* Input de URL externa (cuando la URL no empieza por el prefijo IES) */
+  .url-full-input {
+    min-width: 220px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  .btn-del {
+    background: none; border: none; cursor: pointer;
+    color: var(--danger); font-size: 1.1rem; font-weight: 700;
+    transition: transform .15s;
+    min-width: 40px; min-height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-del:hover { transform: scale(1.3); background: rgba(192,57,43,.08); }
+  .btn-del:active { transform: scale(1.1); }
+
+  .desc-cell { min-width: 160px; }
+  .desc-fi    { cursor: help; }
+
+  .desc-modal-box {
+    background: var(--white);
+    color: var(--text);
+    border: 1px solid rgba(11,37,69,.12);
+    border-left: 4px solid var(--gold);
+    border-radius: 12px;
+    padding: 0 1.1rem .85rem;
+    max-width: 320px;
+    max-height: 60vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 36px rgba(0,0,0,.20);
+    font-size: .88rem;
+    line-height: 1.55;
+    pointer-events: auto;
+    animation: descFadeIn .15s ease-out;
+  }
+  .desc-modal-box::before {
+    content: "📝 Descripción";
+    display: block;
+    font-size: .7rem;
+    font-weight: 800;
+    color: var(--navy);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    padding: .55rem 0 .4rem;
+    margin-bottom: .45rem;
+    border-bottom: 1px solid rgba(11,37,69,.08);
+  }
+  @keyframes descFadeIn {
+    from { opacity: 0; transform: translateY(-4px) scale(.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .actions {
+    display: flex; gap: .7rem; flex-wrap: wrap; margin-top: 1rem;
+    /* Separación de la tabla o barra de filtros que viene a continuación */
+    margin-bottom: 1rem;
+  }
+
+  /* ══ Barra de filtros por perfil ════════════════════ */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin: .9rem 0 1.1rem;
+    padding: .65rem .8rem;
+    background: linear-gradient(to right, #f5f7fb, #eef2f8);
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+  }
+  .filter-label {
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-right: .2rem;
+    letter-spacing: .02em;
+    flex-shrink: 0;
+  }
+  .filter-btn {
+    background: #fff;
+    border: 1.5px solid #d1d5db;
+    color: var(--text);
+    padding: .4rem .9rem;
+    border-radius: 22px;
+    cursor: pointer;
+    font-size: .82rem;
+    font-weight: 600;
+    transition: all .18s ease;
+    min-height: 36px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+  }
+  .filter-btn:hover {
+    border-color: var(--navy);
+    background: #f0f4ff;
+    transform: translateY(-1px);
+  }
+  .filter-btn.active {
+    background: var(--navy);
+    color: var(--white);
+    border-color: var(--navy);
+    box-shadow: 0 3px 12px rgba(11,37,69,.25);
+  }
+  .filter-btn.active:hover {
+    background: var(--gold);
+    color: var(--navy);
+    border-color: var(--gold);
+    box-shadow: 0 4px 14px rgba(200,168,75,.4);
+  }
+
+  /* ══ Sección Exportar ═════════════════════════════════ */
+  .export-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    margin: .5rem 0 1rem;
+    padding: 1rem;
+    background: #f5f7fb;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  @media (max-width: 599px) {
+    .export-grid { grid-template-columns: 1fr; }
+  }
+  .export-checkboxes, .export-radios {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-top: .3rem;
+  }
+  .exp-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .9rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    font-weight: 500;
+  }
+  .exp-label input[type="checkbox"],
+  .exp-label input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .exp-label input[type="radio"] { width: 18px; height: 18px; }
+  .exp-select {
+    margin-top: .3rem;
+    max-width: 100%;
+    font-size: .82rem;
+  }
+  .export-checkboxes .exp-label:hover,
+  .export-radios .exp-label:hover {
+    color: var(--navy);
+  }
+  .exp-label input[type="checkbox"]:checked + span,
+  .exp-label input[type="radio"]:checked + span {
+    color: var(--navy);
+    font-weight: 700;
+  }
+
+  /* Aviso destacado dentro de las ayudas de los acordeones */
+  .hint-warning {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: .6rem .8rem;
+    margin: .7rem 0;
+    border-radius: 8px;
+    font-size: .8rem;
+  }
+
+  /* ══ Panel de selección de aplicaciones a exportar (mejora TecDeA) ══ */
+  .app-sel-panel {
+    margin: .8rem 0 .4rem;
+    padding: .9rem;
+    background: var(--white);
+    border: 1px solid #d7dce5;
+    border-radius: 10px;
+  }
+  .app-sel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: .6rem; flex-wrap: wrap; margin-bottom: .5rem;
+  }
+  .app-sel-header .fi-label { margin: 0; }
+  .app-sel-actions { display: flex; gap: .4rem; }
+  .app-sel-actions .btn { min-height: 32px; padding: .25rem .75rem; font-size: .75rem; }
+  .app-sel-search { margin-bottom: .6rem; font-size: .85rem; }
+  .app-sel-list {
+    max-height: 230px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    border: 1px solid #e5e7eb; border-radius: 8px; background: #fafbfd;
+  }
+  .app-sel-item {
+    display: flex; align-items: center; gap: .55rem;
+    padding: .45rem .7rem; border-bottom: 1px solid #eef1f5;
+    font-size: .85rem; cursor: pointer;
+    user-select: none; -webkit-user-select: none;
+  }
+  .app-sel-item:last-child { border-bottom: none; }
+  .app-sel-item:hover { background: #f0f4fa; }
+  .app-sel-item input[type="checkbox"] {
+    width: 17px; height: 17px; accent-color: var(--navy);
+    flex-shrink: 0; cursor: pointer; margin: 0;
+  }
+  .app-sel-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48%; min-width: 0; }
+  .app-sel-url {
+    color: var(--muted); font-size: .72rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; flex: 1; text-align: right;
+  }
+  .app-sel-empty {
+    padding: 1rem; text-align: center;
+    color: var(--muted); font-style: italic; font-size: .85rem;
+  }
+
+  /* ══ Chips de selección por perfil y filtro de categoría ══ */
+  .app-sel-cats { display: flex; flex-direction: column; gap: .45rem; margin-bottom: .6rem; }
+  .app-sel-cats-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .app-sel-cats-label {
+    font-size: .68rem; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; min-width: 128px;
+  }
+  .app-sel-chips { display: flex; flex-wrap: wrap; gap: .35rem; flex: 1; min-width: 0; }
+  .app-sel-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .28rem .6rem; border-radius: 999px; cursor: pointer;
+    background: #eef2f7; border: 1.5px solid #d7dce5; color: var(--text);
+    font-size: .74rem; font-weight: 600; line-height: 1.25; font-family: inherit;
+    transition: background .15s, border-color .15s, color .15s;
+    user-select: none; -webkit-user-select: none;
+  }
+  .app-sel-chip:hover { border-color: var(--navy); background: #e3ebf5; }
+  .app-sel-chip .app-sel-chip-n {
+    font-weight: 700; font-size: .66rem; color: var(--muted);
+    background: #fff; border-radius: 999px; padding: .04rem .38rem;
+  }
+  .app-sel-chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .app-sel-chip.on .app-sel-chip-n { background: rgba(255,255,255,.28); color: #fff; }
+  .app-sel-chip.partial { border-color: var(--navy); background: #e8eefb; color: var(--navy); }
+  .app-sel-chip.partial .app-sel-chip-n { color: var(--navy); }
+  .app-sel-filters { display: flex; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
+  .app-sel-filters .app-sel-search { flex: 1; min-width: 150px; margin-bottom: 0; }
+  .app-sel-catfilter {
+    width: auto; min-width: 175px; max-width: 100%; flex-shrink: 0;
+    appearance: auto; -webkit-appearance: menulist;
+    padding: .35rem .45rem; font-size: .8rem; min-height: 38px;
+  }
+  .app-sel-tags { display: inline-flex; align-items: center; gap: .25rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .app-sel-tag {
+    font-size: .62rem; font-weight: 700; padding: .08rem .34rem; border-radius: 6px;
+    background: #e8eefb; color: var(--navy); border: 1px solid #d5dff0; white-space: nowrap;
+  }
+  .app-sel-tag.tag-cat { background: #fdf3d9; color: #8a6100; border-color: #efdba6; }
+  .app-sel-scope {
+    font-size: .72rem; color: #8a6100; background: #fdf3d9;
+    border: 1px dashed #efdba6; padding: .3rem .55rem;
+    border-radius: 8px; margin-bottom: .55rem;
+  }
+  .app-sel-chip.noop,
+  .app-sel-chip:disabled { opacity: .45; cursor: not-allowed; }
+  .app-sel-cats-note {
+    font-size: .72rem; color: #4b5b74; background: #eef2f7;
+    border: 1px dashed #d7dce5; padding: .3rem .55rem; border-radius: 8px;
+  }
+  @media (max-width: 600px) {
+    .app-sel-cats-label { min-width: 100%; }
+    .app-sel-catfilter { min-width: 0; flex: 1; }
+  }
+
+  /* ══ Importación de aplicaciones (mejora TecDeA) ════ */
+  .import-zone {
+    padding: 1rem;
+    background: #f5f7fb;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  .import-file-row {
+    display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+    margin: .4rem 0 .8rem;
+  }
+  .import-file-btn { cursor: pointer; }
+  .import-file-name {
+    font-size: .82rem; color: var(--muted); font-style: italic; word-break: break-all;
+  }
+  .import-summary {
+    background: #eef4fb; border-left: 4px solid var(--navy);
+    padding: .6rem .8rem; border-radius: 8px; font-size: .82rem;
+    margin-bottom: .8rem; color: var(--text);
+  }
+  .modal-wide { width: min(760px, 100%); }
+  .modal.modal-wide { width: min(760px, 100%); }
+  .import-preview-wrap {
+    max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: .9rem;
+  }
+  .import-preview-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .import-preview-table th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--navy); color: var(--white);
+    padding: .5rem .6rem; text-align: left;
+    font-size: .74rem; font-weight: 700;
+  }
+  .import-preview-table td {
+    padding: .45rem .6rem; border-bottom: 1px solid #eef1f5; vertical-align: top;
+  }
+  .import-preview-table input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: var(--navy); cursor: pointer;
+  }
+  .import-preview-table input[type="checkbox"]:disabled { cursor: not-allowed; }
+  .imp-row-new { background: var(--white); }
+  .imp-row-dup { background: #fef3c7; }
+  .imp-row-inv { background: #fee2e2; }
+  .imp-badge {
+    display: inline-block; padding: .15rem .5rem; border-radius: 20px;
+    font-size: .68rem; font-weight: 700; white-space: nowrap;
+  }
+  .imp-badge-ok  { background: #dcfce7; color: #166534; }
+  .imp-badge-dup { background: #fef3c7; color: #92400e; }
+  .imp-badge-inv { background: #fee2e2; color: #991b1b; }
+  .imp-dupof { display: block; font-size: .68rem; color: var(--muted); margin-top: .15rem; }
+  .imp-name { font-weight: 600; word-break: break-word; }
+  .imp-url { color: var(--muted); font-size: .72rem; word-break: break-all; }
+  .imp-perfiles { font-size: .74rem; color: var(--text); }
+
+  /* ══ Contenido del modal «Sobre esta app» (mejora TecDeA) ══ */
+  .about-body {
+    font-size: .92rem;
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .about-body p { margin: 0 0 .75rem; }
+  .about-body p:last-of-type { margin-bottom: .5rem; }
+  .about-link {
+    color: var(--navy);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-word;
+  }
+  .about-link:hover { color: var(--gold); }
+  .about-list { list-style: none; margin: 0; padding-left: 1.7rem; }
+  .about-list li { counter-increment: about-item; margin-bottom: .5rem; position: relative; }
+  .about-list li::before {
+    content: counter(about-item) ")";
+    position: absolute; left: -1.7rem;
+    font-weight: 700; color: var(--navy);
+  }
+
+  /* ══ Modal «Nueva aplicación» (mejora TecDeA) ═══════ */
+  .req { color: var(--danger); font-weight: 700; }
+  .addapp-hint {
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.45;
+    margin: -.3rem 0 .8rem;
+  }
+  .addapp-warn {
+    font-size: .8rem;
+    color: #8a5a00;
+    background: #fff6e0;
+    border: 1px solid #E8943A;
+    border-radius: 6px;
+    padding: .4rem .6rem;
+    margin: -.2rem 0 .7rem;
+  }
+  .addapp-profiles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem .8rem;
+    margin-bottom: .2rem;
+  }
+  .addapp-profiles label {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .85rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .addapp-profiles input[type=checkbox] {
+    width: 17px; height: 17px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  @media (max-width: 480px) {
+    .addapp-profiles { grid-template-columns: 1fr; }
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: .4rem;
+    border: none; border-radius: 9px;
+    padding: .6rem 1.1rem; cursor: pointer;
+    font-size: .88rem; font-weight: 600;
+    transition: filter .18s, transform .15s;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    font-family: inherit;
+  }
+  .btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--navy); color: var(--white); }
+  .btn-gold    { background: var(--gold); color: var(--navy); }
+  .btn-ghost   { background: #e5e7eb; color: var(--text); }
+
+  /* grids de credenciales */
+  .cred-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: .8rem;
+    margin-bottom: 1rem;
+  }
+  .fi-label {
+    font-size: .78rem; color: var(--muted);
+    margin-bottom: .25rem; font-weight: 600;
+  }
+  .hint {
+    font-size: .75rem;
+    color: var(--muted);
+    margin-top: .5rem;
+    margin-bottom: .5rem;
+    line-height: 1.4;
+    font-style: italic;
+  }
+
+  /* ══ Modales (login + grupo) ═══════════════════════ */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(11,37,69,.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    padding: 1rem;
+  }
+  .modal {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 48px rgba(0,0,0,.25);
+    padding: 1.75rem 1.5rem 1.5rem;
+    width: min(420px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal h2 {
+    font-size: 1.15rem; font-weight: 700; color: var(--navy);
+    margin-bottom: 1.1rem; text-align: center;
+  }
+  .modal .fi { margin-bottom: .7rem; }
+  .modal-error { color: var(--danger); font-size: .82rem; min-height: 1.2rem; margin-bottom: .5rem; }
+  .modal-actions { display: flex; gap: .7rem; justify-content: flex-end; margin-top: .5rem; }
+
+  /* ══ Toast ══════════════════════════════════════════ */
+  .toast {
+    position: fixed;
+    bottom: calc(1.5rem + var(--safe-bottom));
+    left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: var(--white);
+    padding: .85rem 1.6rem .85rem 2.8rem; border-radius: 30px;
+    font-size: .92rem; font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0,0,0,.25);
+    z-index: 9999;
+    animation: fadeIn .25s;
+    max-width: calc(100vw - 2rem);
+    text-align: center;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: fixed;  /* redundante pero refuerza */
+  }
+  /* Icono circular a la izquierda del mensaje */
+  .toast::before {
+    content: "";
+    position: absolute;
+    left: .85rem; top: 50%; transform: translate(0, -50%);
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.25);
+  }
+  .toast.err {
+    background: var(--danger);
+    padding-left: 2.8rem;
+  }
+  .toast.err::before {
+    content: "✕";
+    background: rgba(255,255,255,.25);
+    color: #fff;
+    font-size: .8rem; font-weight: 900;
+    line-height: 20px; text-align: center;
+    display: inline-block;
+  }
+  .toast.ok {
+    background: #1a7f37;  /* verde éxito */
+    padding-left: 2.8rem;
+  }
+  .toast.ok::before {
+    content: "✓";
+    background: rgba(255,255,255,.25);
+    color: #fff;
+    font-size: .85rem; font-weight: 900;
+    line-height: 20px; text-align: center;
+    display: inline-block;
+  }
+  @keyframes fadeIn { from { opacity:0; bottom: calc(1rem + var(--safe-bottom)); } to { opacity:1; bottom: calc(1.5rem + var(--safe-bottom)); } }
+
+  /* ══════════════════════════════════════════════════════
+     RESPONSIVE — Mobile First
+     ══════════════════════════════════════════════════════ */
+
+  /* ── Móvil pequeño (< 400px) ─────────────────────── */
+  @media (max-width: 400px) {
+    .back-btn {
+      font-size: .78rem;
+      padding: .6rem 1.2rem;
+      max-width: 100%;
+      border-radius: 25px;
+    }
+
+    .main-btn {
+      min-width: 100px;
+      flex: 1 1 100px;
+      max-width: none;
+      padding: 1rem 1rem;
+      font-size: .88rem;
+      border-radius: 12px;
+    }
+    .main-btn .btn-icon { font-size: 2.5rem; }
+
+    /* Escudo +50% sobre la versión anterior (era 140/120) */
+    .shield-wrap {
+      width: 210px; height: 210px;
+      box-shadow: 0 0 0 7px var(--gold), var(--shadow);
+    }
+    .shield-wrap img { width: 180px; height: 180px; }
+
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: .75rem;
+    }
+    .app-card { padding: .85rem .4rem .7rem; border-radius: 12px; }
+    .app-card-icon-wrap,
+    .app-card-icon-wrap img { width: 56px; height: 56px; }
+    .app-card-name { font-size: .72rem; }
+
+    header h1 { font-size: .95rem; }
+    .home-title { font-size: 1.25rem; }
+    .home-sub { font-size: .82rem; }
+    .group-heading { font-size: 1.15rem; }
+
+    .section-box { padding: 1rem; }
+    .config-title { font-size: 1.15rem; }
+
+    .btn { padding: .55rem .9rem; font-size: .82rem; }
+
+    /* Tabla → tarjetas apiladas en móvil pequeño */
+    table#appsTable thead,
+    table#adminsTable thead { display: none; }
+    table#appsTable,
+    table#adminsTable { display: block; width: 100%; }
+    table#appsTable tbody,
+    table#adminsTable tbody { display: block; width: 100%; }
+    table#appsTable tr,
+    table#adminsTable tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      padding: .85rem;
+      margin-bottom: .75rem;
+      border: 1.5px solid #e5e7eb;
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+    table#appsTable tr:hover td,
+    table#adminsTable tr:hover td { background: transparent; }
+    table#appsTable td,
+    table#adminsTable td {
+      display: flex; flex-direction: column;
+      border: none; padding: 0;
+    }
+    table#appsTable td::before,
+    table#adminsTable td::before {
+      content: attr(data-label);
+      font-size: .68rem; font-weight: 700; color: var(--navy);
+      margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .03em;
+    }
+    table#appsTable td:last-child,
+    table#adminsTable td:last-child {
+      grid-column: 1 / -1;
+      align-items: stretch;
+    }
+    table#appsTable td:last-child::before,
+    table#adminsTable td:last-child::before { display: none; }
+    .desc-cell { min-width: 0; }
+    .url-fi { min-width: 0; }
+    .url-cell { min-width: 0; }
+    .url-prefix { font-size: .7rem; padding: .35rem .4rem; }
+
+    /* Modal a pantalla casi completa en móvil pequeño */
+    .modal {
+      width: 100%;
+      padding: 1.25rem 1rem 1rem;
+      border-radius: 12px;
+    }
+  }
+
+  /* ── Móvil medio (400–599px) ─────────────────────── */
+  @media (min-width: 401px) and (max-width: 599px) {
+    /* Escudo +50% (era 170/145) */
+    .shield-wrap {
+      width: 255px; height: 255px;
+    }
+    .shield-wrap img { width: 218px; height: 218px; }
+
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: .85rem;
+    }
+
+    /* Tabla → tarjetas apiladas */
+    table#appsTable thead,
+    table#adminsTable thead { display: none; }
+    table#appsTable,
+    table#adminsTable { display: block; width: 100%; }
+    table#appsTable tbody,
+    table#adminsTable tbody { display: block; width: 100%; }
+    table#appsTable tr,
+    table#adminsTable tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      padding: .85rem;
+      margin-bottom: .75rem;
+      border: 1.5px solid #e5e7eb;
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+    table#appsTable tr:hover td,
+    table#adminsTable tr:hover td { background: transparent; }
+    table#appsTable td,
+    table#adminsTable td {
+      display: flex; flex-direction: column;
+      border: none; padding: 0;
+    }
+    table#appsTable td::before,
+    table#adminsTable td::before {
+      content: attr(data-label);
+      font-size: .68rem; font-weight: 700; color: var(--navy);
+      margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .03em;
+    }
+    table#appsTable td:last-child,
+    table#adminsTable td:last-child {
+      grid-column: 1 / -1;
+      align-items: stretch;
+    }
+    table#appsTable td:last-child::before,
+    table#adminsTable td:last-child::before { display: none; }
+    .desc-cell { min-width: 0; }
+    .url-fi { min-width: 0; }
+    .url-cell { min-width: 0; }
+    .url-prefix { font-size: .7rem; padding: .35rem .4rem; }
+  }
+
+  /* ── Móvil/tablet (600–767px) ────────────────────── */
+  @media (min-width: 600px) and (max-width: 767px) {
+    .cred-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* ── Móvil: credenciales en 1 columna ────────────── */
+  @media (max-width: 599px) {
+    .cred-grid { grid-template-columns: 1fr; }
+    .modal { padding: 1.5rem 1.25rem 1.25rem; }
+  }
+
+  /* ── Tablet (768px+) ─────────────────────────────── */
+  @media (min-width: 768px) {
+    main { padding: 2rem 1.5rem 4rem; }
+
+    /* Escudo +50% (era 240/205) */
+    .shield-wrap { width: 360px; height: 360px; box-shadow: 0 0 0 10px var(--gold), var(--shadow); }
+    .shield-wrap img { width: 308px; height: 308px; }
+
+    .home-title { font-size: 1.6rem; }
+    .home-sub { font-size: .95rem; }
+
+    .main-btn {
+      min-width: 170px;
+      max-width: 210px;
+      padding: 1.4rem 2rem;
+      font-size: 1rem;
+    }
+    .main-btn .btn-icon { font-size: 3rem; }
+
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 1.25rem;
+    }
+    .app-card { padding: 1.2rem .8rem 1rem; }
+    .app-card-name { font-size: .82rem; }
+
+    .group-heading { font-size: 1.4rem; }
+    .config-title { font-size: 1.4rem; }
+    .section-box { padding: 1.5rem; }
+
+    header { padding: .75rem 1.5rem; }
+    header h1 { font-size: 1.1rem; }
+  }
+
+  /* ── Desktop (1024px+) ───────────────────────────── */
+  @media (min-width: 1024px) {
+    /* Escudo +50% (era 280/240) */
+    .shield-wrap { width: 420px; height: 420px; }
+    .shield-wrap img { width: 360px; height: 360px; }
+
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1.3rem;
+    }
+  }
+
+  /* ── Pantallas muy anchas (1280px+) ──────────────── */
+  @media (min-width: 1280px) {
+    main { max-width: 1080px; }
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    }
+    .shield-wrap { width: 450px; height: 450px; }
+    .shield-wrap img { width: 385px; height: 385px; }
+  }
+
+  /* ── Pantallas 4K/Ultra-wide (1920px+) ─────────────── */
+  @media (min-width: 1920px) {
+    main { max-width: 1400px; }
+    .app-grid {
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+    .shield-wrap { width: 500px; height: 500px; }
+    .shield-wrap img { width: 430px; height: 430px; }
+    .main-btn { max-width: 240px; padding: 1.6rem 2.5rem; font-size: 1.1rem; }
+  }
+
+  /* ── Dispositivos pequeños tipo watch/mini ═══════════ */
+  @media (max-width: 320px) {
+    .main-buttons {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .4rem;
+    }
+    .main-btn {
+      max-width: none !important;
+      width: 100%;
+      padding: .7rem .4rem !important;
+      font-size: .72rem !important;
+    }
+    .main-btn .btn-icon { font-size: 1.5rem; }
+    .shield-wrap { width: 180px; height: 180px; }
+    header h1 { font-size: .85rem; }
+    header .subtitle { font-size: .65rem; }
+  }
+
+  /* ── Safe Area para iPhone con notch/dynamic island ── */
+  @supports (padding: env(safe-area-inset-top)) {
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    header {
+      padding-left: calc(1rem + env(safe-area-inset-left));
+      padding-right: calc(1rem + env(safe-area-inset-right));
+    }
+    .toast {
+      bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
+  /* ── Impresión ══════════════════════════════════════ */
+  @media print {
+    body { background: white; color: black; }
+    header, .btn-config, .toast, .modal-bg { display: none !important; }
+    .app-grid { grid-template-columns: repeat(4, 1fr); }
+    .app-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+    .back-btn { display: none !important; }
+  }
+
+  /* ══ Utilidades adicionales ═══════════════════════ */
+
+  /* Checkboxes accesibles en móvil */
+  input[type="checkbox"] {
+    width: 22px; height: 22px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  @media (max-width: 767px) {
+    input[type="checkbox"] {
+      width: 26px; height: 26px;
+    }
+  }
+
+  /* Scroll suave en iOS para tablas */
+  .tbl-wrap {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .tbl-wrap::-webkit-scrollbar { height: 4px; }
+  .tbl-wrap::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+
+  /* Prevenir selección de texto en botones (móvil) */
+  button, .app-card, .btn-config, .back-btn {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Fix para teclado virtual en iOS */
+  @supports (padding: max(0px)) {
+    main {
+      padding-bottom: calc(4rem + var(--safe-bottom));
+    }
+  }
+
+  /* Evitar zoom automático en inputs iOS (font-size >= 16px) */
+  @media (max-width: 767px) {
+    input.fi, input[type="text"], input[type="password"], input[type="url"] {
+      font-size: 16px;
+    }
+    /* En tabla → tarjetas, el font-size puede bajar para que quepan dos columnas */
+    table#appsTable .fi,
+    table#adminsTable .fi {
+      font-size: 14px;
+    }
+  }
+
+  /* Pantallas con prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      transition-duration: .01ms !important;
+    }
+    html { scroll-behavior: auto; }
+  }
+
+  /* Modo horizontal en móvil: ajustar shields */
+  @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+    .shield-wrap {
+      width: 180px; height: 180px;
+      margin: 1rem auto 1.2rem;
+    }
+    .shield-wrap img { width: 155px; height: 155px; }
+    .home-sub { margin-bottom: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ CABECERA ═══════════════════════════════════ -->
+<header>
+  <div>
+    <h1>IES Virgen de Villadiego</h1>
+    <div class="subtitle">Portal de aplicaciones</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-about" type="button" aria-label="Información sobre esta aplicación"
+            title="Información sobre esta app (Vibe Coding · reportar errores)"
+            onclick="ies.showAboutModal()">⚠️</button>
+    <button class="btn-config" onclick="ies.showLoginModal()">⚙ Configuración</button>
+  </div>
+</header>
+
+<!-- ═══════════ MAIN ═══════════════════════════════════════ -->
+<main>
+
+  <!-- Vista: HOME -->
+  <section id="view-home">
+    <div class="shield-wrap">
+      <img src="img/escudo.png"
+           alt="Escudo IES Virgen de Villadiego"
+           onerror="this.style.fontSize='3rem';this.alt='🏫';">
+    </div>
+    <p class="home-title">Bienvenido al Portal</p>
+    <p class="home-sub">Selecciona tu perfil para acceder a las aplicaciones</p>
+
+    <div class="main-buttons">
+      <button class="main-btn" onclick="ies.requestGroupAccess('profesorado')">
+        <span class="btn-icon">👨‍🏫</span>Profesorado
+      </button>
+      <button class="main-btn" onclick="ies.requestGroupAccess('gestion')">
+        <span class="btn-icon">🗂️</span>Gestión
+      </button>
+      <button class="main-btn" onclick="ies.requestGroupAccess('recursos')">
+        <span class="btn-icon">📚</span>Recursos
+      </button>
+      <button class="main-btn" onclick="ies.requestGroupAccess('ia')">
+        <span class="btn-icon">🤖</span>IA
+      </button>
+    </div>
+  </section>
+
+  <!-- Vista: GRUPO -->
+  <section id="view-group" class="hidden">
+    <h2 class="group-heading" id="groupTitle"></h2>
+    <div class="app-grid" id="appGrid"></div>
+    <div class="back-row">
+      <button class="back-btn" onclick="ies.renderHome()">Volver</button>
+    </div>
+  </section>
+
+  <!-- Vista: CONFIGURACIÓN -->
+  <section id="view-config" class="hidden">
+    <div class="config-header">
+      <span class="config-title">Configuración</span>
+      <button class="back-btn" onclick="ies.renderHome()">Volver</button>
+    </div>
+
+    <!-- Aplicaciones -->
+    <div class="accordion" data-acc="apps">
+      <button type="button" class="acc-header" onclick="ies.toggleAccordion('apps')">
+        <span class="acc-title">📋 Aplicaciones</span>
+        <span class="acc-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="acc-content">
+        <p class="hint">
+          💾 Los cambios se guardan automáticamente al salir de cada celda.
+          Las nuevas aplicaciones se dan de alta con el botón «＋ Añadir aplicación», que abre un modal de confirmación.
+          Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
+          Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
+        </p>
+        <div class="filter-bar" id="appsFilterBar">
+          <span class="filter-label">🔎 Filtrar por perfil:</span>
+          <button class="filter-btn" data-filter="profesorado" onclick="ies.setAppsFilter('profesorado')">👨‍🏫 Profesorado</button>
+          <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión</button>
+          <button class="filter-btn" data-filter="recursos" onclick="ies.setAppsFilter('recursos')">📚 Recursos</button>
+          <button class="filter-btn" data-filter="ia" onclick="ies.setAppsFilter('ia')">🤖 IA</button>
+        </div>
+        <div class="actions">
+          <button class="btn btn-gold" onclick="ies.showAddAppModal()">＋ Añadir aplicación</button>
+          <button class="btn btn-ghost" onclick="ies.sortApps('name')">↕ Ordenar por nombre</button>
+          <button class="btn btn-ghost" onclick="ies.sortApps('url')">↕ Ordenar por URL</button>
+          <button class="btn btn-primary" onclick="ies.saveConfig()">💾 Guardar aplicaciones</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="appsTable">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>URL</th>
+                <th>Prof.</th>
+                <th>Gest.</th>
+                <th>Rec.</th>
+                <th>IA</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contraseñas de acceso por perfil -->
+    <div class="accordion" data-acc="pass">
+      <button type="button" class="acc-header" onclick="ies.toggleAccordion('pass')">
+        <span class="acc-title">🔐 Contraseñas de acceso por perfil</span>
+        <span class="acc-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="acc-content">
+        <p class="hint">Al pulsar "Profesorado", "Gestión", "Recursos" o "IA" en la pantalla principal, se pedirá la contraseña correspondiente. Déjala vacía para permitir acceso libre a ese perfil (no recomendado).</p>
+        <div class="cred-grid">
+          <div>
+            <div class="fi-label">Profesorado</div>
+            <input type="text" id="passProfesorado" class="fi" placeholder="••••••" autocomplete="off">
+          </div>
+          <div>
+            <div class="fi-label">Gestión</div>
+            <input type="text" id="passGestion" class="fi" placeholder="••••••" autocomplete="off">
+          </div>
+          <div>
+            <div class="fi-label">Recursos</div>
+            <input type="text" id="passRecursos" class="fi" placeholder="••••••" autocomplete="off">
+          </div>
+          <div>
+            <div class="fi-label">IA</div>
+            <input type="text" id="passIa" class="fi" placeholder="••••••" autocomplete="off">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="ies.saveGroupPasswordsConfig()">🔒 Guardar contraseñas</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Administradores (CRUD multi-admin) -->
+    <div class="accordion" data-acc="admins">
+      <button type="button" class="acc-header" onclick="ies.toggleAccordion('admins')">
+        <span class="acc-title">👥 Administradores</span>
+        <span class="acc-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="acc-content">
+        <p class="hint">Gestiona los usuarios con permiso para acceder a esta pantalla de Configuración. Debe existir al menos uno; no se permiten usuarios duplicados.</p>
+        <p class="hint hint-warning">
+          🔒 <strong>Nota importante:</strong> Las contraseñas de los administradores se incluirán en la exportación a Excel/PDF. Asegúrate de proteger el archivo exportado.
+        </p>
+        <div class="actions">
+          <button class="btn btn-gold" onclick="ies.addAdminRow()">＋ Añadir administrador</button>
+          <button class="btn btn-primary" onclick="ies.saveAdminsConfig()">💾 Guardar administradores</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="adminsTable">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Contraseña</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exportar datos -->
+    <div class="accordion" data-acc="export">
+      <button type="button" class="acc-header" onclick="ies.toggleAccordion('export')">
+        <span class="acc-title">📤 Exportar datos</span>
+        <span class="acc-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="acc-content">
+        <p class="hint">Exporta todo o parte de la configuración a PDF o Excel (.xlsx). Las librerías se cargan bajo demanda al pulsar el botón (no afectan al rendimiento inicial). Si marcas «Aplicaciones», podrás elegir en el panel inferior exactamente cuáles exportar: marcando casillas individuales, pulsando los chips de perfil (un clic marca todo el grupo, otro clic lo desmarca) o filtrando la lista por perfil. Con un filtro o búsqueda activa, «Todas», «Ninguna» y los chips se aplican únicamente a las aplicaciones visibles.</p>
+        <p class="hint hint-warning">
+          ⚠️ <strong>Seguridad:</strong> Al exportar "Administradores", sus contraseñas serán visibles en el archivo. Protege el archivo exportado.
+        </p>
+
+        <div class="export-grid">
+          <div>
+            <div class="fi-label">¿Qué exportar?</div>
+            <div class="export-checkboxes">
+              <label class="exp-label">
+                <input type="checkbox" id="expApps" checked onchange="ies.onExpAppsToggle()">
+                <span>Aplicaciones</span>
+              </label>
+              <label class="exp-label">
+                <input type="checkbox" id="expAdmins" checked>
+                <span>Administradores</span>
+              </label>
+              <label class="exp-label">
+                <input type="checkbox" id="expPass" checked>
+                <span>Contraseñas por perfil</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <div class="fi-label">Formato de exportación</div>
+            <div class="export-radios">
+              <label class="exp-label">
+                <input type="radio" name="expFormat" value="excel" checked>
+                <span>📊 Excel (.xlsx)</span>
+              </label>
+              <label class="exp-label">
+                <input type="radio" name="expFormat" value="pdf">
+                <span>📄 PDF (.pdf)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ Panel de selección individual de aplicaciones (visible al marcar "Aplicaciones") ══ -->
+        <div id="appSelPanel" class="app-sel-panel">
+          <div class="app-sel-header">
+            <div class="fi-label" style="margin:0">Aplicaciones a exportar: <strong id="appSelCount">0</strong></div>
+            <div class="app-sel-actions">
+              <button type="button" class="btn btn-ghost" onclick="ies.selectAllExportApps(true)">Todas</button>
+              <button type="button" class="btn btn-ghost" onclick="ies.selectAllExportApps(false)">Ninguna</button>
+            </div>
+          </div>
+          <div id="appSelCats" class="app-sel-cats"></div>
+          <div class="app-sel-filters">
+            <input type="text" id="appSelSearch" class="fi app-sel-search" placeholder="🔎 Buscar aplicación por nombre o URL…" oninput="ies.filterExportAppList()" autocomplete="off">
+            <select id="appSelCatFilter" class="fi app-sel-catfilter" onchange="ies.filterExportAppList()" aria-label="Filtrar por perfil"></select>
+          </div>
+          <div id="appSelScopeNote" class="app-sel-scope hidden">🎯 Filtro o búsqueda activa: «Todas», «Ninguna» y los chips solo afectan a las aplicaciones visibles.</div>
+          <div id="appSelList" class="app-sel-list"></div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" onclick="ies.exportData()">📥 Exportar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Importar aplicaciones -->
+    <div class="accordion" data-acc="import">
+      <button type="button" class="acc-header" onclick="ies.toggleAccordion('import')">
+        <span class="acc-title">📥 Importar aplicaciones</span>
+        <span class="acc-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="acc-content">
+        <p class="hint">Añade aplicaciones masivamente desde un archivo Excel (.xlsx) exportado previamente desde este portal (hoja «Aplicaciones»). Se omitirán automáticamente los duplicados: se considera duplicada cualquier aplicación cuyo nombre o URL coincida con una ya existente en la base de datos o que esté repetida dentro del propio archivo. También se aceptan archivos antiguos cuya columna de perfil se llame «Administrativa» (se importará como «Recursos»).</p>
+        <p class="hint hint-warning">
+          ⚠️ <strong>Importante:</strong> Solo se importan los datos de aplicaciones (nombre, descripción, URL y perfiles). Las contraseñas de perfiles y administradores que pudiera contener el archivo NO se importan.
+        </p>
+        <div class="import-zone">
+          <div class="fi-label">Archivo Excel exportado (.xlsx)</div>
+          <div class="import-file-row">
+            <label class="btn btn-gold import-file-btn" for="importFile">📂 Seleccionar archivo…</label>
+            <input type="file" id="importFile" accept=".xlsx,.xlsm" style="display:none" onchange="ies.onImportFileSelected()">
+            <span id="importFileName" class="import-file-name">Ningún archivo seleccionado</span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" onclick="ies.analyzeImportFile()">🔍 Analizar archivo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════ MODAL LOGIN ADMINISTRADOR ══════════════════ -->
+<div id="loginModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>🔐 Acceso a Configuración</h2>
+    <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="on">
+      <div class="fi-label">Usuario</div>
+      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="username"
+             onkeydown="if(event.key==='Enter') document.getElementById('loginPass').focus()">
+      <div class="fi-label" style="margin-top:.5rem">Contraseña</div>
+      <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') ies.doLogin()">
+      <div id="loginError" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="ies.closeLoginModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CONTRASEÑA DE GRUPO ══════════════════ -->
+<div id="groupPassModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2 id="groupPassTitle">Acceso</h2>
+    <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="on">
+      <input type="text" name="username" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true">
+      <div class="fi-label">Contraseña</div>
+      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') ies.doGroupLogin()">
+      <div id="groupPassError" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="ies.closeGroupPassModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL DESCRIPCIÓN (hover / tap) ═══════════ -->
+<div id="descModal" class="hidden" style="position:fixed;top:0;left:0;z-index:9000;pointer-events:none;">
+  <div class="desc-modal-box">
+    <p id="descModalText"></p>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL «SOBRE ESTA APP» (Vibe Coding) ═══════ -->
+<div id="aboutModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>⚠️ Sobre esta aplicación</h2>
+    <div class="about-body">
+      <p>Esta app está implementada mediante <a class="about-link" href="https://educacion.bilateria.org/creacion-de-herramientas-educativas-con-inteligencia-artificial-guia-para-docentes-sin-programacion" target="_blank" rel="noopener noreferrer">Vibe Coding</a>.</p>
+      <p>Ni soy un programador experto ni el Vibe Coding es perfecto.</p>
+      <p>Si detectas un bug, envía un mail a <a class="about-link" href="mailto:bugs@iesvilladiego.com">bugs@iesvilladiego.com</a>, indicando:</p>
+      <ol class="about-list">
+        <li>Nombre de la aplicación en la que has encontrado el error.</li>
+        <li>Descripción detallada del error.</li>
+      </ol>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" onclick="ies.closeAboutModal()">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL NUEVA APLICACIÓN ═══════════════════ -->
+<div id="addAppModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>＋ Nueva aplicación</h2>
+    <form onsubmit="event.preventDefault(); ies.confirmAddApp()" autocomplete="off" novalidate>
+      <div class="fi-label">Nombre <span class="req">*</span></div>
+      <input type="text" id="addAppName" class="fi" placeholder="Nombre de la aplicación" oninput="ies.addAppNameInput()">
+      <div id="addAppNameWarn" class="addapp-warn hidden"></div>
+
+      <div class="fi-label">Descripción</div>
+      <input type="text" id="addAppDesc" class="fi" placeholder="Descripción (opcional)" oninput="ies.addAppFormChanged()">
+
+      <div class="fi-label">URL</div>
+      <input type="text" id="addAppUrl" class="fi" placeholder="https://iesvilladiego.github.io/…" oninput="ies.addAppFormChanged()">
+      <div class="addapp-hint">La URL base del IES es <code>https://iesvilladiego.github.io/</code>: completa el path final (ej.: <code>https://iesvilladiego.github.io/mmo/</code>). Si la aplicación está en otro dominio, introduce la ruta completa de la PWA.</div>
+
+      <div class="fi-label">Perfiles <span class="req">*</span></div>
+      <div class="addapp-profiles">
+        <label><input type="checkbox" id="addAppProfesorado" onchange="ies.addAppFormChanged()"> 👨‍🏫 Profesorado</label>
+        <label><input type="checkbox" id="addAppGestion" onchange="ies.addAppFormChanged()"> 🗂️ Gestión</label>
+        <label><input type="checkbox" id="addAppRecursos" onchange="ies.addAppFormChanged()"> 📚 Recursos</label>
+        <label><input type="checkbox" id="addAppIa" onchange="ies.addAppFormChanged()"> 🤖 IA</label>
+      </div>
+
+      <div id="addAppError" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="ies.closeAddAppModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="addAppConfirmBtn">＋ Añadir aplicación</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL IMPORTACIÓN DE APLICACIONES ══════════ -->
+<div id="importModal" class="modal-bg hidden">
+  <div class="modal modal-wide">
+    <h2>📥 Importar aplicaciones</h2>
+    <div id="importSummary" class="import-summary"></div>
+    <div class="import-preview-wrap">
+      <table class="import-preview-table">
+        <thead>
+          <tr>
+            <th style="width:34px"></th>
+            <th>Nombre</th>
+            <th>URL</th>
+            <th>Perfiles</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="importPreviewBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="ies.closeImportModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="importConfirmBtn" onclick="ies.confirmImport()">📥 Importar seleccionadas</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TOAST ══════════════════════════════════════ -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- ═══════ Registro del Service Worker (PWA) ═══════ -->
+<script>
+  // Esperar a que la página cargue para registrar el SW
+  // (no bloquea el primer paint)
+  window.addEventListener('load', () => {
+    if (!('serviceWorker' in navigator)) return;
+    // Sólo registrar en producción (https o localhost)
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
+
+    navigator.serviceWorker.register('sw.js', { scope: './' })
+      .then((reg) => {
+        console.log('[PWA] Service Worker registrado con scope:', reg.scope);
+
+        // Detectar actualizaciones del SW y avisar al usuario
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Hay una nueva versión disponible
+              console.log('[PWA] Nueva versión disponible. Recarga para aplicar.');
+              if (window.ies && typeof window.ies.showToast === 'function') {
+                // No existe todavía showToast en window.ies, pero por si acaso
+              }
+              // Mostrar aviso sutil en consola; el usuario puede recargar
+            }
+          });
+        });
+      })
+      .catch((err) => {
+        console.warn('[PWA] Error al registrar el Service Worker:', err);
+      });
+
+    // Si el SW ha tomado el control y hay una nueva versión, recargar una vez
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // Evitar bucle de recarga con un flag
+        if (!window._swReloaded) {
+          window._swReloaded = true;
+          // location.reload();
+        }
+      });
+    }
+  });
+</script>
+
+</body>
+</html>
