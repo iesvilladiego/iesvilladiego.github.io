@@ -400,7 +400,9 @@
   }
 
   function showGroup(group) {
-    let filtered = apps.filter(a => a[group]);
+    // Solo apps ACTIVAS: las desactivadas por el administrador no se muestran
+    // en el perfil (isAppActive: apps sin la propiedad «active» = activas)
+    let filtered = apps.filter(a => a[group] && isAppActive(a));
     // Ordenar alfabéticamente por nombre (case-insensitive, español)
     filtered.sort((a, b) => {
       const va = (a.name || "").toString().toLowerCase().trim();
@@ -916,7 +918,9 @@
     // Aplicar filtro por perfil (manteniendo el índice original en el array apps)
     const rowsData = [];
     apps.forEach((a, i) => {
-      const matches = appsFilter === 'all' || a[appsFilter];
+      // Filtro especial «_inactive»: listar solo las apps desactivadas
+      const matches = appsFilter === 'all'
+        || (appsFilter === '_inactive' ? a.active === false : !!a[appsFilter]);
       if (matches) rowsData.push({ app: a, idx: i });
     });
     // Aplicar ordenación (por defecto: alfabético por nombre)
@@ -927,7 +931,7 @@
       return appsSort.direction === 'asc' ? cmp : -cmp;
     });
     const emptyRow = rowsData.length === 0
-      ? `<tr class="no-apps-row"><td colspan="8" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
+      ? `<tr class="no-apps-row"><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
       : "";
     tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }, visualIndex) => {
       const rowClass = visualIndex % 2 === 0 ? 'row-even' : 'row-odd';
@@ -937,8 +941,10 @@
       const uncategorized = hasName && !hasCat;
       const rowClasses = [rowClass];
       if (uncategorized) rowClasses.push('row-uncategorized');
+      const inactive = a.active === false;
+      if (inactive) rowClasses.push('row-inactive');
       return `
-      <tr data-i="${i}" class="${rowClasses.join(' ')}" data-uncategorized="${uncategorized}">
+      <tr data-i="${i}" class="${rowClasses.join(' ')}" data-uncategorized="${uncategorized}" data-inactive="${inactive}">
         <td data-label="Nombre"><input type="text" class="fi" value="${escHtml(a.name)}" placeholder="Nombre" data-field="name"></td>
         <td data-label="Descripción" class="desc-cell">
           <input type="text" class="fi desc-fi" value="${escHtml(a.desc || '')}" placeholder="Descripción" data-field="desc">
@@ -948,6 +954,7 @@
         <td data-label="Gest." class="chk"><input type="checkbox" ${a.gestion        ? "checked" : ""} data-field="gestion"></td>
         <td data-label="Rec." class="chk"><input type="checkbox" ${a.recursos       ? "checked" : ""} data-field="recursos"></td>
         <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
+        <td data-label="Activa" class="chk chk-activa"><input type="checkbox" ${inactive ? "" : "checked"} data-field="active" title="Desmarca para ocultar la app en el perfil (queda desactivada, NO se borra)"></td>
         <td data-label="" class="chk"><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
       </tr>`;}).join("");
 
@@ -961,6 +968,8 @@
       inp.addEventListener("change", () => {
         collectTableData();
         updateRowUncategorizedState(inp);
+        // Refrescar al vuelo el resaltado de fila desactivada (casilla «Act.»)
+        if (inp.dataset.field === 'active') updateRowInactiveState(inp);
         // Si acabamos de marcar una categoría y ya no hay apps sin categoría,
         // ocultar inmediatamente el toast de advertencia
         if (inp.type === 'checkbox' && inp.checked && getUncategorizedApps().length === 0) {
@@ -1076,7 +1085,7 @@
       // Asegurar que el objeto existe
       if (!apps[i]) {
         console.warn(`[Portal IES] apps[${i}] es undefined, inicializando...`);
-        apps[i] = { name: "", desc: "", url: "", profesorado: false, gestion: false, recursos: false, ia: false };
+        apps[i] = { name: "", desc: "", url: "", profesorado: false, gestion: false, recursos: false, ia: false, active: true };
       }
       tr.querySelectorAll("[data-field]").forEach(el => {
         const f = el.dataset.field;
@@ -1152,6 +1161,24 @@
   function isAppUncategorized(a) {
     if (!a || !a.name || !a.name.trim()) return false;
     return !GROUP_KEYS.some(k => a[k]);
+  }
+
+  // ¿App activa (visible en el perfil)? Compatibilidad: las apps guardadas sin
+  // la propiedad «active» (versiones anteriores de la BD) se consideran activas.
+  function isAppActive(a) {
+    return !!a && a.active !== false;
+  }
+
+  // Actualiza el estado visual (atenuado) de una fila al des/activar la app
+  // sin reconstruir toda la tabla. Se llama al cambiar la casilla «Act.».
+  function updateRowInactiveState(el) {
+    const tr = el.closest('tr');
+    if (!tr) return;
+    const i = parseInt(tr.dataset.i);
+    if (isNaN(i) || !apps[i]) return;
+    const inactive = apps[i].active === false;
+    tr.classList.toggle('row-inactive', inactive);
+    tr.dataset.inactive = String(inactive);
   }
 
   // Payload que de verdad se escribe en la BD: todas las apps salvo las nuevas
@@ -1517,7 +1544,7 @@
     // Detección de duplicados/similares (aviso, no bloqueo — igual que en la tabla)
     const similar = findSimilarApps(name, -1, 0.75);
 
-    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia });
+    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: true });
 
     // Mostrar la nueva app: reset de filtros (comportamiento del antiguo addAppRow)
     resetAppsFilterUI();
@@ -1861,7 +1888,8 @@
         'Profesorado': a.profesorado ? 'Sí' : 'No',
         'Gestión':     a.gestion     ? 'Sí' : 'No',
         'Recursos':    a.recursos    ? 'Sí' : 'No',
-        'IA':          a.ia          ? 'Sí' : 'No'
+        'IA':          a.ia          ? 'Sí' : 'No',
+        'Activa':      a.active !== false ? 'Sí' : 'No'
       }));
     }
 
@@ -1922,7 +1950,8 @@
         { wch: 12 },  // Profesorado
         { wch: 12 },  // Gestión
         { wch: 12 },  // Recursos
-        { wch: 8 }    // IA
+        { wch: 8 },   // IA
+        { wch: 8 }    // Activa
       ];
       X.utils.book_append_sheet(wb, ws, 'Aplicaciones');
     }
@@ -2340,11 +2369,12 @@
       const key = expAppKey(a);
       const checked = exportRowCheckedState(a, key, st, preserveSelection);
       const profiles = EXPORT_PROFILES.filter(p => !!a[p.key]);
+      const inactive = a.active === false;
       return `
-        <label class="app-sel-item" data-profiles="${escHtml(profiles.map(p => p.key).join(','))}">
+        <label class="app-sel-item${inactive ? ' app-sel-item-inactive' : ''}" data-profiles="${escHtml(profiles.map(p => p.key).join(','))}">
           <input type="checkbox" data-i="${idx}" data-key="${escHtml(key)}" ${checked ? 'checked' : ''} onchange="ies.updateExportSelCount()">
           <span class="app-sel-name">${escHtml(a.name || '(sin nombre)')}</span>
-          <span class="app-sel-tags">${profiles.map(p => `<span class="app-sel-tag" title="${escHtml(p.label)}">${p.icon}</span>`).join('')}</span>
+          <span class="app-sel-tags">${inactive ? '<span class="app-sel-tag app-sel-tag-inactive" title="Desactivada: no visible en el perfil">🚫</span>' : ''}${profiles.map(p => `<span class="app-sel-tag" title="${escHtml(p.label)}">${p.icon}</span>`).join('')}</span>
           <span class="app-sel-url">${escHtml(a.url || '')}</span>
         </label>`;
     }).join('') + '<div id="appSelNoRes" class="app-sel-empty hidden">Ninguna aplicación coincide con el buscador o el filtro de perfil.</div>';
@@ -2455,6 +2485,7 @@
         gestion: !!r.gestion,
         recursos: !!r.recursos,
         ia: !!r.ia,
+        active: r.active !== false,
         status: 'new',
         dupOf: ''
       };
@@ -2520,15 +2551,20 @@
       const rawRows = X.utils.sheet_to_json(wb.Sheets[target], { defval: '' });
       if (!rawRows.length) throw new Error('La hoja «Aplicaciones» no contiene filas.');
 
-      const parsed = rawRows.map(r => ({
-        name: String(pickImportField(r, 'Nombre', 'name') || ''),
-        desc: String(pickImportField(r, 'Descripción', 'Descripcion', 'desc') || ''),
-        url:  String(pickImportField(r, 'URL', 'url', 'Enlace') || ''),
-        profesorado: parseImportBool(pickImportField(r, 'Profesorado', 'Prof.')),
-        gestion:     parseImportBool(pickImportField(r, 'Gestión', 'Gestion', 'Gest.')),
-        recursos:    parseImportBool(pickImportField(r, 'Recursos', 'Rec.', 'Administrativa', 'Adm.')),
-        ia:          parseImportBool(pickImportField(r, 'IA'))
-      }));
+      const parsed = rawRows.map(r => {
+        // Columna «Activa»: vacío (archivos antiguos sin esa columna) → activa por defecto
+        const activaRaw = pickImportField(r, 'Activa', 'Activa?');
+        return {
+          name: String(pickImportField(r, 'Nombre', 'name') || ''),
+          desc: String(pickImportField(r, 'Descripción', 'Descripcion', 'desc') || ''),
+          url:  String(pickImportField(r, 'URL', 'url', 'Enlace') || ''),
+          profesorado: parseImportBool(pickImportField(r, 'Profesorado', 'Prof.')),
+          gestion:     parseImportBool(pickImportField(r, 'Gestión', 'Gestion', 'Gest.')),
+          recursos:    parseImportBool(pickImportField(r, 'Recursos', 'Rec.', 'Administrativa', 'Adm.')),
+          ia:          parseImportBool(pickImportField(r, 'IA')),
+          active: activaRaw === '' ? true : parseImportBool(activaRaw)
+        };
+      });
 
       _importCandidates = analyzeImportRows(parsed);
       openImportModal();
@@ -2588,7 +2624,7 @@
           <td>${chk}</td>
           <td><span class="imp-name">${escHtml(c.name || '(sin nombre)')}</span><br><span class="imp-url">${escHtml(c.desc || '')}</span></td>
           <td><span class="imp-url">${escHtml(c.url || '—')}</span></td>
-          <td><span class="imp-perfiles">${importPerfilesLabel(c)}</span></td>
+          <td><span class="imp-perfiles">${importPerfilesLabel(c)}${c.active === false ? '<br><span class="imp-badge imp-badge-inv imp-inact-note">🚫 se importará desactivada</span>' : ''}</span></td>
           <td>${badge}${dupOf}</td>
         </tr>`;
     }).join('');
@@ -2629,7 +2665,8 @@
       profesorado: c.profesorado,
       gestion: c.gestion,
       recursos: c.recursos,
-      ia: c.ia
+      ia: c.ia,
+      active: c.active !== false
     }));
 
     apps = apps.concat(imported);
@@ -3564,6 +3601,40 @@
       border-radius: 12px;
     }
   }
+
+  /* ══ Fila desactivada (casilla «Act.» desmarcada): atenuada ═══ */
+  table#appsTable tbody tr.row-inactive td {
+    background: linear-gradient(to right, #f4f5f7 0%, #eceef1 50%, #f4f5f7 100%) !important;
+    border-bottom: 1px solid #e2e5ea !important;
+  }
+  table#appsTable tbody tr.row-inactive:hover td {
+    background: linear-gradient(135deg, #eceef1 0%, #e2e5ea 100%) !important;
+    border-bottom-color: #d1d5db !important;
+  }
+  table#appsTable tbody tr.row-inactive input[type="text"] {
+    opacity: .55;
+  }
+  table#appsTable tbody tr.row-inactive {
+    box-shadow: inset 4px 0 0 #9ca3af;
+  }
+  table#appsTable input[data-field="active"] {
+    accent-color: #6b7280;
+  }
+  /* En móvil (tarjetas) */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-inactive {
+      background: linear-gradient(to right, #f4f5f7 0%, #eceef1 50%, #f4f5f7 100%) !important;
+      outline: 2px dashed #9ca3af;
+      outline-offset: -1px;
+      border-radius: 12px;
+    }
+  }
+
+  /* App desactivada en el panel de selección de exportación */
+  .app-sel-item-inactive .app-sel-name { opacity: .6; }
+  .app-sel-item-inactive .app-sel-url  { opacity: .5; }
+  .app-sel-tag-inactive { filter: grayscale(1); }
+  .imp-inact-note { display: inline-block; margin-top: 3px; }
 
   .chk { text-align: center; }
   .fi {
@@ -4571,6 +4642,7 @@
           Las nuevas aplicaciones se dan de alta con el botón «＋ Añadir aplicación», que abre un modal de confirmación.
           Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
           Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
+          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra) y el filtro «🚫 Desactivadas» las lista todas para volver a activarlas.
         </p>
         <div class="filter-bar" id="appsFilterBar">
           <span class="filter-label">🔎 Filtrar por perfil:</span>
@@ -4578,6 +4650,7 @@
           <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión</button>
           <button class="filter-btn" data-filter="recursos" onclick="ies.setAppsFilter('recursos')">📚 Recursos</button>
           <button class="filter-btn" data-filter="ia" onclick="ies.setAppsFilter('ia')">🤖 IA</button>
+          <button class="filter-btn" data-filter="_inactive" onclick="ies.setAppsFilter('_inactive')" title="Mostrar solo las aplicaciones desactivadas (ocultas en el perfil)">🚫 Desactivadas</button>
         </div>
         <div class="actions">
           <button class="btn btn-gold" onclick="ies.showAddAppModal()">＋ Añadir aplicación</button>
@@ -4596,6 +4669,7 @@
                 <th>Gest.</th>
                 <th>Rec.</th>
                 <th>IA</th>
+                <th class="chk" title="Activa: desmarca para ocultar la app en el perfil sin borrarla">Act.</th>
                 <th></th>
               </tr>
             </thead>
