@@ -8,7 +8,7 @@
    - Si offline y el HTML no está cacheado, sirve la versión cacheada
 ╔═════════════════════════════════════════════════════════════════*/
 
-const CACHE_VERSION = 'portal-ies-v12';
+const CACHE_VERSION = 'portal-ies-v13';
 const CACHE_NAME = CACHE_VERSION;
 
 // Recursos estáticos que se cachean al instalar la PWA
