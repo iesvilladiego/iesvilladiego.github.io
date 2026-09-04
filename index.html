@@ -3065,7 +3065,8 @@
     max-width: 960px;
     margin: 0 auto;
     padding: 1.5rem 1rem 3rem;
-    padding-bottom: calc(3rem + var(--safe-bottom));
+    /* Hueco inferior amplio: deja sitio al botón Volver flotante (FAB) */
+    padding-bottom: calc(5rem + var(--safe-bottom));
     width: 100%;
   }
 
@@ -3160,11 +3161,17 @@
   /* ══ Group view ═════════════════════════════════════ */
   #view-group {}
 
-  /* ══ Botón Volver - Diseño Responsive ═════════════ */
+  /* ══ Botón Volver - FAB flotante abajo-derecha ═══ */
 
-  /* Estilos base comunes */
+  /* Estilos base comunes: fijo en la esquina inferior derecha de la
+     pantalla, siempre visible (flotante) aunque se haga scroll, de modo
+     que queda SIEMPRE por debajo de la matriz de aplicaciones. */
   .back-btn {
-    display: inline-flex; align-items: center; gap: .5rem;
+    display: inline-flex; align-items: center; gap: .4rem;
+    position: fixed;
+    right: calc(1rem + var(--safe-right));
+    bottom: calc(1.5rem + var(--safe-bottom));
+    z-index: 500; /* sobre el contenido; bajo modales (999) y toasts (9999) */
     background: var(--navy);
     color: var(--white);
     border: none; cursor: pointer;
@@ -3175,7 +3182,7 @@
     transition: transform .18s, box-shadow .18s, background .18s, color .18s, opacity .2s;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    min-height: 42px;
+    min-height: 44px;
     letter-spacing: .02em;
     text-decoration: none;
     user-select: none;
@@ -3186,6 +3193,24 @@
     border: 1.5px solid rgba(200,168,75,.4);
 
     opacity: 0.95;
+    animation: backBtnSlideIn .3s ease-out;
+  }
+
+  /* Flecha ↺ antes del texto (común a todos los tamaños) */
+  .back-btn::before {
+    content: "\21BA";
+    font-size: 1.05rem;
+    margin-right: .15rem;
+    transition: transform .3s ease-in-out;
+  }
+  .back-btn:hover::before {
+    transform: rotate(-180deg);
+  }
+
+  /* Entrada deslizante desde el borde derecho */
+  @keyframes backBtnSlideIn {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 0.95; transform: translateX(0); }
   }
 
   /* Cuando el botón Volver está activo/visible, asegurar máxima visibilidad */
@@ -3194,15 +3219,9 @@
     opacity: 1;
   }
 
-  /* ═══ Pantallas GRANDES (≥768px): Botón FLOTANTE CENTRADO ═══ */
+  /* ═══ Pantallas GRANDES (≥768px): FAB abajo-derecha con sombra realzada ═══ */
   @media (min-width: 768px) {
     .back-btn {
-      position: fixed;
-      top: 50%;
-      right: 1rem;
-      transform: translateY(-50%);
-      z-index: 1000;
-      writing-mode: horizontal-tb;
       box-shadow:
         0 0 0 1px rgba(200,168,75,.3),
         0 6px 24px rgba(11,37,69,.45),
@@ -3210,77 +3229,32 @@
     }
 
     .back-btn:hover {
-      transform: translateY(-50%) scale(1.05);
+      transform: translateY(-2px) scale(1.05);
       box-shadow:
         0 0 0 1px rgba(200,168,75,.6),
         0 8px 32px rgba(200,168,75,.4),
         0 4px 16px rgba(0,0,0,.25);
     }
 
-    .back-btn::before {
-      content: "\21BA";
-      font-size: 1.2rem;
-      display: block;
-      margin: 0 0 .15rem 0;
-      transition: transform .3s ease-in-out;
-    }
-
-    .back-btn:hover::before {
-      transform: rotate(-180deg);
-    }
-
-    @keyframes backBtnSlideIn {
-      from { opacity: 0; transform: translateY(-50%) translateX(20px); }
-      to   { opacity: 0.95; transform: translateY(-50%) translateX(0); }
-    }
-
-    .back-btn {
-      animation: backBtnSlideIn .3s ease-out;
-    }
-
-    /* Ocultar los contenedores originales en pantallas grandes */
-    .back-row,
+    /* Compactar la cabecera de Configuración (el botón ya no ocupa sitio) */
     .config-header {
       padding-top: 0 !important;
     }
   }
 
-  /* ═══ Pantallas PEQUEÑAS (<768px): Botón ESTÁTICO AL FINAL ═══ */
+  /* ═══ Pantallas PEQUEÑAS (<768px): FAB flotante, elevado sobre la zona del toast ═══ */
   @media (max-width: 767px) {
     .back-btn {
-      position: static;
-      transform: none;
-      margin-top: 1.5rem;
-      margin-bottom: 1rem;
-      width: 100%;
-      max-width: 280px;
-      justify-content: center;
-      border-radius: 30px;
-      padding: .7rem 1.5rem;
-    }
-
-    .back-btn::before {
-      content: "\21BA";
-      font-size: 1rem;
-      margin-right: .3rem;
-      margin-bottom: 0;
-    }
-
-    .back-btn:hover::before {
-      transform: rotate(-180deg);
-      transition: transform .3s ease-in-out;
+      /* Elevado para no solaparse con los avisos (toast) inferiores */
+      bottom: calc(5rem + var(--safe-bottom));
+      right: calc(.9rem + var(--safe-right));
+      min-height: 46px;
+      font-size: .92rem;
+      padding: .7rem 1.3rem .7rem 1.05rem;
     }
 
     .back-btn:hover {
       transform: translateY(-2px) scale(1.02);
-    }
-
-    .back-row {
-      display: flex;
-      justify-content: center;
-      padding: 1.5rem 0 1rem;
-      margin-top: auto;
-      border-top: 1px solid rgba(11,37,69,.08);
     }
 
     .config-header {
@@ -3313,15 +3287,6 @@
       font-size: .82rem !important;
     }
     .main-btn .btn-icon { font-size: 1.6rem; margin-bottom: 0; }
-
-    @keyframes backBtnFadeInMobile {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 0.95; transform: translateY(0); }
-    }
-
-    .back-btn {
-      animation: backBtnFadeInMobile .25s ease-out;
-    }
   }
 
   .group-heading {
@@ -3394,16 +3359,10 @@
     justify-content: space-between;
     gap: .75rem; margin-bottom: 1.5rem;
   }
-  .config-header .back-btn { margin-bottom: 0; }
   .config-title { font-size: 1.3rem; font-weight: 700; color: var(--navy); }
 
-  /* Contenedor para el botón Volver en vistas sin título (grupo) */
-  .back-row {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 1.5rem;
-  }
-  .back-row .back-btn { margin-bottom: 0; }
+  /* Nota: el botón Volver es un FAB fijo (ver .back-btn); ya no necesita
+     contenedor propio (.back-row eliminado) ni márgenes en flujo. */
 
   .section-box {
     background: var(--white);
@@ -4227,9 +4186,9 @@
   /* ── Móvil pequeño (< 400px) ─────────────────────── */
   @media (max-width: 400px) {
     .back-btn {
-      font-size: .78rem;
-      padding: .6rem 1.2rem;
-      max-width: 100%;
+      font-size: .8rem;
+      padding: .55rem 1.05rem .55rem .95rem;
+      right: calc(.7rem + var(--safe-right));
       border-radius: 25px;
     }
 
@@ -4533,7 +4492,7 @@
   /* Fix para teclado virtual en iOS */
   @supports (padding: max(0px)) {
     main {
-      padding-bottom: calc(4rem + var(--safe-bottom));
+      padding-bottom: calc(5rem + var(--safe-bottom));
     }
   }
 
@@ -4618,9 +4577,9 @@
   <section id="view-group" class="hidden">
     <h2 class="group-heading" id="groupTitle"></h2>
     <div class="app-grid" id="appGrid"></div>
-    <div class="back-row">
-      <button class="back-btn" onclick="ies.renderHome()">Volver</button>
-    </div>
+    <!-- Botón Volver flotante (FAB): fijo abajo-derecha, siempre accesible
+         bajo la matriz de apps sin depender del scroll -->
+    <button class="back-btn" onclick="ies.renderHome()">Volver</button>
   </section>
 
   <!-- Vista: CONFIGURACIÓN -->
