@@ -62,6 +62,17 @@
   const DEFAULT_DB_URL = "https://iesvdv-96a18-default-rtdb.europe-west1.firebasedatabase.app";
   const URL_PREFIX = "https://iesvilladiego.github.io/";
 
+  // ── Identificador de versión visible (fix TecDeA) ─────────────
+  // Permite verificar SIEMPRE qué versión está ejecutando el navegador:
+  // aparece en la consola (F12), en el pie de la portada y en los mensajes
+  // de error. Si NO ves esta versión, el navegador está sirviendo una
+  // página antigua (caché o Service Worker) → Ctrl+F5 / Ctrl+Mayús+R.
+  const PORTAL_VERSION = "v2026-09-06-r3 (fix TecDeA: race + plan B REST + watchdog)";
+  window.PORTAL_VERSION = PORTAL_VERSION;
+  try {
+    console.info("%cPortal IES " + PORTAL_VERSION, "background:#1e293b;color:#7dd3fc;padding:2px 8px;border-radius:4px;font-weight:bold");
+  } catch (e) {}
+
   // ── Mapeo palabras-clave → emoji para iconos auto-generados ──
   // Si el texto de la descripción contiene alguna de estas palabras,
   // se usa el emoji correspondiente como icono de fallback.
@@ -242,10 +253,34 @@
   // si la lectura por SDK falla se reintenta la MISMA lectura por la API REST
   // de la base de datos (HTTPS puro). Solo lectura: el plan B nunca escribe
   // en la BD, así que no puede alterar los datos.
+  const REST_TIMEOUT_MS = 4000;
   async function restGet(path) {
-    const res = await fetch(`${DEFAULT_DB_URL}/${ROOT}/${path}.json`, { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
+    // Con AbortController acotamos CADA intento REST a 4 s: si la red
+    // «engulle» los paquetes (cortafuegos silencioso), fetch se quedaría
+    // colgado minutos y la app permanecería en «Cargando…» para siempre.
+    // Con la cota, a los 4 s se aborta y loadData puede mostrar el error
+    // honesto con botón de reintento. — fix TecDeA
+    const attempt = async () => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), REST_TIMEOUT_MS);
+      try {
+        const res = await fetch(`${DEFAULT_DB_URL}/${ROOT}/${path}.json`, { cache: "no-store", signal: ctrl.signal });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    try {
+      return await attempt();
+    } catch (firstErr) {
+      // Un único reintento: algunos cortafuegos dejan pasar la 2ª petición.
+      try {
+        return await attempt();
+      } catch (secondErr) {
+        throw firstErr;
+      }
+    }
   }
 
   // ── Cota de tiempo para la lectura por SDK (fix TecDeA) ──
@@ -554,7 +589,7 @@
     // lo que confundía al administrador pensando que había perdido los datos.
     // — fix TecDeA
     if (_appsLoadFailed) {
-      grid.innerHTML = "<p class='empty'>⚠ No se pudieron cargar las aplicaciones desde Firebase.<br><small>Comprueba tu conexión a internet. Los datos NO se han borrado: siguen intactos en la base de datos.</small><br><button id='btnRetryLoad' class='main-btn' style='margin-top:.9rem;'>↻ Reintentar la carga</button></p>";
+      grid.innerHTML = "<p class='empty'>⚠ No se pudieron cargar las aplicaciones desde Firebase.<br><small>Comprueba tu conexión a internet. Los datos NO se han borrado: siguen intactos en la base de datos.</small><br><button id='btnRetryLoad' class='main-btn' style='margin-top:.9rem;'>↻ Reintentar la carga</button><br><small style='opacity:.6'>Portal " + PORTAL_VERSION + "</small></p>";
       document.getElementById("btnRetryLoad")?.addEventListener("click", () => {
         // Reintento manual: reactiva el estado de carga y relanza loadData.
         // Al terminar, loadData volverá a pintar este perfil con los datos
@@ -3111,7 +3146,38 @@
   };
 
   // ── Arranque ──────────────────────────────────────────
+  // Sello de versión visible en la portada (fix TecDeA)
+  try {
+    const stamp = document.getElementById('portalVersionStamp');
+    if (stamp) stamp.textContent = 'Portal ' + PORTAL_VERSION + ' · si sigues viendo esta línea tras una actualización, pulsa Ctrl+F5';
+  } catch (e) {}
+
   loadData();
+
+  // ── Perro guardián de la carga inicial (fix TecDeA) ────
+  // Red de seguridad absoluta: si en 15 s la carga inicial NO ha terminado
+  // (SDK colgado Y plan B REST abortado a la vez, p. ej. red que engulle
+  // los paquetes), se marca el fallo explícitamente y se muestra el
+  // mensaje con botón «↻ Reintentar la carga». Nadie se queda ya colgado
+  // en «Cargando aplicaciones…» de forma indefinida.
+  setTimeout(() => {
+    if (_appsLoaded) return;
+    console.warn("[Portal IES] Watchdog: la carga inicial no terminó en 15 s. Mostrando estado de fallo con reintento.");
+    _appsLoadFailed = true;
+    _appsLoaded = true;
+    try {
+      const groupView = document.getElementById("view-group");
+      if (_currentGroup && groupView && !groupView.classList.contains("hidden")) {
+        showGroup(_currentGroup);            // refrescar la vista abierta con el error
+      } else if (_pendingOpenGroup) {
+        const g = _pendingOpenGroup;
+        _pendingOpenGroup = null;
+        requestGroupAccess(g);               // continuar el flujo pulsado (pedirá contraseña)
+      }
+    } catch (wdErr) {
+      console.warn("[Portal IES] Watchdog: error al refrescar la vista:", wdErr);
+    }
+  }, 15000);
 
   // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
   ['passProfesorado', 'passGestion', 'passRecursos', 'passIa'].forEach(id => {
@@ -4784,6 +4850,10 @@
         <span class="btn-icon">🤖</span>IA
       </button>
     </div>
+
+    <!-- Sello de versión (fix TecDeA): permite verificar en pantalla qué
+         versión está ejecutando el navegador sin abrir la consola. -->
+    <p id="portalVersionStamp" style="opacity:.55;font-size:.72rem;margin-top:1.4rem;"></p>
   </section>
 
   <!-- Vista: GRUPO -->
@@ -5146,22 +5216,26 @@
     // Sólo registrar en producción (https o localhost)
     if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
-    navigator.serviceWorker.register('sw.js', { scope: './' })
+    navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' })
       .then((reg) => {
         console.log('[PWA] Service Worker registrado con scope:', reg.scope);
 
-        // Detectar actualizaciones del SW y avisar al usuario
+        // Si al registrar ya había una versión esperando, activarla YA.
+        // (fix TecDeA: antes el usuario podía quedarse días en la versión
+        //  antigua hasta que le diera la gana recargar dos veces.)
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+
+        // Detectar actualizaciones del SW: activarlas automáticamente y
+        // recargar una sola vez para servir siempre la última versión.
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Hay una nueva versión disponible
-              console.log('[PWA] Nueva versión disponible. Recarga para aplicar.');
-              if (window.ies && typeof window.ies.showToast === 'function') {
-                // No existe todavía showToast en window.ies, pero por si acaso
-              }
-              // Mostrar aviso sutil en consola; el usuario puede recargar
+              console.log('[PWA] Nueva versión detectada: activando y recargando…');
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         });
@@ -5170,13 +5244,13 @@
         console.warn('[PWA] Error al registrar el Service Worker:', err);
       });
 
-    // Si el SW ha tomado el control y hay una nueva versión, recargar una vez
+    // Cuando el nuevo SW toma el control, recargar UNA vez para que la
+    // página se sirva ya con la versión nueva (el flag evita bucles).
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // Evitar bucle de recarga con un flag
         if (!window._swReloaded) {
           window._swReloaded = true;
-          // location.reload();
+          location.reload();
         }
       });
     }
