@@ -67,7 +67,7 @@
   // aparece en la consola (F12), en el pie de la portada y en los mensajes
   // de error. Si NO ves esta versión, el navegador está sirviendo una
   // página antigua (caché o Service Worker) → Ctrl+F5 / Ctrl+Mayús+R.
-  const PORTAL_VERSION = "v2026-09-06-r3 (fix TecDeA: race + plan B REST + watchdog)";
+  const PORTAL_VERSION = "v2026-09-06-r5 (fix TecDeA: REST fresco primero + doble submit + race + watchdog)";
   window.PORTAL_VERSION = PORTAL_VERSION;
   try {
     console.info("%cPortal IES " + PORTAL_VERSION, "background:#1e293b;color:#7dd3fc;padding:2px 8px;border-radius:4px;font-weight:bold");
@@ -306,19 +306,40 @@
   // de una ruta (p. ej. permisos en reglas de Firebase sobre 'admins' o
   // 'groupPasswords' que todavía no estaban creadas) NO impida cargar las
   // demás (apps, etc.). Antes, un único get rechazado vaciaba toda la carga.
+  //
+  // ── Lectura inicial FRESCA: REST primero, SDK de respaldo — fix TecDeA r5 ──
+  // El SDK de RTDB puede resolver get() DESDE SU CACHÉ LOCAL (IndexedDB) con
+  // datos OBSOLETOS cuando sus conexiones (WebSocket/long-polling) están
+  // bloqueadas o intermitentes: responde al instante… pero con valores viejos.
+  // Eso producía el patrón «clave rápida = falla / clave lenta = funciona»:
+  // el modal se abría con la contraseña antigua cacheada y las apps que
+  // llegaban después iban también desfasadas. La API REST (HTTPS puro con
+  // cache: no-store) SIEMPRE devuelve el estado VIGENTE de la base de datos,
+  // así que ahora es la vía PRIMARIA; el SDK queda como respaldo por si REST
+  // estuviera bloqueado (caso inverso, más raro).
+  async function freshGet(path, ref_) {
+    try {
+      const val = await restGet(path);
+      return { val: val ?? null, via: "rest" };
+    } catch (restErr) {
+      const snap = await getWithTimeout(ref_);
+      return { val: snap.exists() ? snap.val() : null, via: "sdk" };
+    }
+  }
+
   async function loadData() {
     const results = await Promise.allSettled([
-      getWithTimeout(appsRef),
-      getWithTimeout(adminsRef),
-      getWithTimeout(groupPassRef),
-      getWithTimeout(legacyAdminRef)
+      freshGet("apps", appsRef),
+      freshGet("admins", adminsRef),
+      freshGet("groupPasswords", groupPassRef),
+      freshGet("admin", legacyAdminRef)
     ]);
 
     // Apps — siempre se procesa aunque las demás fallen
     if (results[0].status === "fulfilled") {
-      const snap = results[0].value;
-      if (snap.exists()) {
-        apps = normalizeList(snap.val());
+      const v = results[0].value.val;
+      if (v) {
+        apps = normalizeList(v);
         // Limpieza defensiva: descartar entradas que no sean objetos válidos
         apps = apps.filter(a => a && typeof a === "object");
         // Migración de la antigua categoría «administrativa» a «recursos»
@@ -327,92 +348,46 @@
       // Carga inicial de apps completada (con o sin datos): a partir de ahora
       // se permite guardar en Firebase. — fix TecDeA
       _appsLoaded = true;
+      console.info("[Portal IES] 'apps' cargado vía " + results[0].value.via + " (fresco). Nº apps: " + apps.length);
     } else {
-      // La lectura por SDK falló (red, reglas de seguridad…). Plan B:
-      // reintentar por la API REST (HTTPS puro) antes de dar la carga por
-      // perdida. Si REST también falla, se marca el intento como terminado
-      // PERO también como fallido, para bloquear escrituras que
-      // sobrescribirían la BD con el estado local vacío y para avisar con
-      // claridad en los perfiles. — fix TecDeA
-      try {
-        const restVal = await restGet("apps");
-        if (restVal) {
-          apps = normalizeList(restVal);
-          apps = apps.filter(a => a && typeof a === "object");
-          apps = apps.map(migrateAppCategories);
-        }
-        _appsLoaded = true;
-        console.info("'apps' cargado vía API REST (plan B) tras fallo del SDK. Nº apps:", apps.length);
-      } catch (restErr) {
-        _appsLoaded = true;
-        _appsLoadFailed = true;
-        console.warn("No se pudo cargar 'apps' desde Firebase (SDK y REST):", results[0].reason, restErr);
-      }
+      // REST y SDK fallaron: se marca el intento como terminado PERO también
+      // como fallido, para bloquear escrituras que sobrescribirían la BD con
+      // el estado local vacío y para avisar con claridad en los perfiles.
+      // — fix TecDeA
+      _appsLoaded = true;
+      _appsLoadFailed = true;
+      console.warn("No se pudo cargar 'apps' desde Firebase (REST y SDK):", results[0].reason);
     }
 
-    // Administradores (multi-admin) — con migración legacy
+    // Administradores (multi-admin) — con migración legacy — fix TecDeA r5
     if (results[1].status === "fulfilled") {
-      const snap = results[1].value;
-      const v = snap.exists() ? snap.val() : null;
-      const list = normalizeList(v).filter(a => a && a.user && a.pass);
+      const list = normalizeList(results[1].value.val).filter(a => a && a.user && a.pass);
       if (list.length > 0) admins = list;
     } else {
-      // Plan B vía REST para admins. — fix TecDeA
-      try {
-        const restVal = await restGet("admins");
-        const list = normalizeList(restVal).filter(a => a && a.user && a.pass);
-        if (list.length > 0) admins = list;
-        console.info("'admins' cargado vía API REST (plan B).");
-      } catch (restErr) {
-        console.warn("No se pudo cargar 'admins' desde Firebase (SDK y REST):", results[1].reason, restErr);
-      }
+      console.warn("No se pudo cargar 'admins' desde Firebase (REST y SDK):", results[1].reason);
     }
     // Migración desde versión anterior (admin único) si no había lista nueva
     if (admins.length === 0 && results[3].status === "fulfilled") {
-      const snap = results[3].value;
-      if (snap.exists()) {
-        const a = snap.val();
-        admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
-      }
+      const a = results[3].value.val;
+      if (a) admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
     } else if (admins.length === 0 && results[3].status === "rejected") {
-      // Plan B vía REST para el admin legacy. — fix TecDeA
-      try {
-        const restVal = await restGet("admin");
-        if (restVal) admins = [{ user: restVal.user || "admin", pass: restVal.pass || "admin" }];
-        console.info("'admin' (legacy) cargado vía API REST (plan B).");
-      } catch (restErr) {
-        console.warn("No se pudo cargar 'admin' (legacy) desde Firebase (SDK y REST):", results[3].reason, restErr);
-      }
+      console.warn("No se pudo cargar 'admin' (legacy) desde Firebase (REST y SDK):", results[3].reason);
     }
     // Garantía final: siempre al menos un admin por defecto
     if (admins.length === 0) admins = [{ user: "admin", pass: "admin" }];
 
-    // Contraseñas por perfil
+    // Contraseñas por perfil — fix TecDeA r5 (REST fresco primero)
     if (results[2].status === "fulfilled") {
-      const snap = results[2].value;
-      if (snap.exists()) {
-        const gp = snap.val() || {};
-        groupPasswords = {
-          profesorado: gp.profesorado || "",
-          gestion:     gp.gestion     || "",
-          recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
-          ia:          gp.ia          || ""
-        };
-      }
+      const gp = results[2].value.val || {};
+      groupPasswords = {
+        profesorado: gp.profesorado || "",
+        gestion:     gp.gestion     || "",
+        recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
+        ia:          gp.ia          || ""
+      };
+      console.info("[Portal IES] 'groupPasswords' cargado vía " + results[2].value.via + " (fresco).");
     } else {
-      // Plan B vía REST para las contraseñas de perfil. — fix TecDeA
-      try {
-        const gp = (await restGet("groupPasswords")) || {};
-        groupPasswords = {
-          profesorado: gp.profesorado || "",
-          gestion:     gp.gestion     || "",
-          recursos:    gp.recursos    || gp.administrativa || "",
-          ia:          gp.ia          || ""
-        };
-        console.info("'groupPasswords' cargado vía API REST (plan B).");
-      } catch (restErr) {
-        console.warn("No se pudo cargar 'groupPasswords' desde Firebase (SDK y REST):", results[2].reason, restErr);
-      }
+      console.warn("No se pudo cargar 'groupPasswords' desde Firebase (REST y SDK):", results[2].reason);
     }
 
     // Estado inicial conocido: evita un guardado/toast fantasma al primer blur
@@ -550,6 +525,18 @@
   }
 
   function doGroupLogin() {
+    // ⛔ Guardia anti-doble-ejecución (fix TecDeA r4): pulsar ENTER disparaba
+    // DOS veces esta función (onkeydown del input + submit implícito del
+    // <form>). La 1ª llamada validaba y CERRABA el modal (pendingGroup=null),
+    // y la 2ª entraba en la rama «sin contraseña» con pendingGroup null →
+    // showGroup(null) → cuadrícula vacía pisando el render correcto. Ese era
+    // el bug de «clave rápida = no se ven las apps». Cualquier llamada sin
+    // grupo pendiente es un eco y se ignora.
+    if (!pendingGroup) {
+      console.warn("[Portal IES] doGroupLogin ignorado: no hay grupo pendiente (posible doble envío). — fix TecDeA r4");
+      closeGroupPassModal();
+      return;
+    }
     const input   = document.getElementById("groupPassInput").value;
     const expected = groupPasswords[pendingGroup];
     const g = pendingGroup;
@@ -559,9 +546,11 @@
       closeGroupPassModal();
       showGroup(g);
     } else if (input === expected) {
+      console.info("[Portal IES] doGroupLogin OK → showGroup(" + g + ")");
       closeGroupPassModal();
       showGroup(g);
     } else {
+      console.warn("[Portal IES] doGroupLogin: contraseña incorrecta (len=" + input.length + ", esperada.len=" + (expected || "").length + ", pendingGroup=" + pendingGroup + ").");
       document.getElementById("groupPassError").textContent = "Contraseña incorrecta.";
       const inp = document.getElementById("groupPassInput");
       inp.value = "";
@@ -570,6 +559,14 @@
   }
 
   function showGroup(group) {
+    // ⛔ Guardia de grupo inválido (fix TecDeA r4): nunca renderizar una
+    // cuadrícula vacía por un grupo null/undefined/desconocido (p. ej. un
+    // doble envío del formulario de contraseña). Volver a la portada.
+    if (!group || !GROUP_KEYS.includes(group)) {
+      console.warn("[Portal IES] showGroup con grupo inválido:", group, "→ volviendo a la portada. — fix TecDeA r4");
+      renderHome();
+      return;
+    }
     _currentGroup = group;   // recordar el grupo mostrado (fix TecDeA)
     const grid     = document.getElementById("appGrid");
 
@@ -5085,13 +5082,14 @@
 <div id="loginModal" class="modal-bg hidden">
   <div class="modal">
     <h2>🔐 Acceso a Configuración</h2>
-    <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="on">
+    <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="off">
       <div class="fi-label">Usuario</div>
-      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="username"
+      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="off"
              onkeydown="if(event.key==='Enter') document.getElementById('loginPass').focus()">
       <div class="fi-label" style="margin-top:.5rem">Contraseña</div>
-      <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter') ies.doLogin()">
+      <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="new-password">
+      <!-- fix TecDeA r4: mismo ajuste que groupPassInput — el onsubmit del
+           <form> ya cubre Enter; el onkeydown duplicaba el envío. -->
       <div id="loginError" class="modal-error"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeLoginModal()">Cancelar</button>
@@ -5105,11 +5103,18 @@
 <div id="groupPassModal" class="modal-bg hidden">
   <div class="modal">
     <h2 id="groupPassTitle">Acceso</h2>
-    <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="on">
-      <input type="text" name="username" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true">
+    <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="off">
+      <input type="text" name="username" autocomplete="off" style="display:none" tabindex="-1" aria-hidden="true">
       <div class="fi-label">Contraseña</div>
-      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter') ies.doGroupLogin()">
+      <!-- fix TecDeA r5: autocomplete new-password evita que Chrome rellene
+           SOLAMENTE una clave antigua guardada (p. ej. tras cambiar la clave
+           del perfil, el autofill metía la vieja y producía «contraseña
+           incorrecta» aparentemente aleatorio). -->
+      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="new-password">
+      <!-- fix TecDeA r4: el onkeydown Enter se ELIMINA — el onsubmit del
+           <form> ya gestiona Enter. Antes se ejecutaba doGroupLogin DOS veces
+           (keydown + submit) y la 2ª, con pendingGroup ya a null, vaciaba la
+           cuadrícula recién renderizada. -->
       <div id="groupPassError" class="modal-error"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeGroupPassModal()">Cancelar</button>
