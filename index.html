@@ -186,6 +186,22 @@
   let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
   let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
 
+  // ── Estado de carga y anti-pérdida de datos (fix TecDeA) ──
+  // _appsLoaded: la lectura inicial de apps ha terminado (con o sin éxito).
+  // Hasta que sea true se BLOQUEA cualquier escritura en Firebase para que un
+  // estado local vacío/incompleto (Firebase lento, caído o sin permisos de
+  // lectura) no pueda vaciar ni sobrescribir la lista real de la base de datos.
+  let _appsLoaded = false;
+  // _appsLoadFailed: la lectura inicial de apps FALLÓ (red/reglas). Permite
+  // mostrar un mensaje honesto en los perfiles en lugar de «no hay aplicaciones».
+  let _appsLoadFailed = false;
+  // Grupo mostrado actualmente en la vista de grupo (para refrescarlo si la
+  // carga termina con la vista ya abierta, sin expulsar al usuario a la portada).
+  let _currentGroup = null;
+  // Perfil pulsado antes de que terminara la carga inicial: se abre
+  // automáticamente (con su contraseña si procede) al completarse la carga.
+  let _pendingOpenGroup = null;
+
   // Claves de grupos/categorías. Fuente única de verdad:
   // añadir aquí un nuevo grupo lo habilita en toda la app (tablas, filtros, validación…).
   // NOTA: la antigua categoría «administrativa» pasó a llamarse «recursos».
@@ -218,6 +234,38 @@
     return a;
   }
 
+  // ── Plan B: lectura vía API REST de Firebase RTDB (fix TecDeA) ──
+  // El SDK de Firebase usa WebSockets (y long-polling como alternativa). En
+  // algunas redes (cortafuegos escolares, antivirus con «escudo web», proxies
+  // o DNS corporativos) esas conexiones se bloquean o se cortan de forma
+  // intermitente, mientras que el HTTPS normal sí funciona. Para ese caso,
+  // si la lectura por SDK falla se reintenta la MISMA lectura por la API REST
+  // de la base de datos (HTTPS puro). Solo lectura: el plan B nunca escribe
+  // en la BD, así que no puede alterar los datos.
+  async function restGet(path) {
+    const res = await fetch(`${DEFAULT_DB_URL}/${ROOT}/${path}.json`, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  // ── Cota de tiempo para la lectura por SDK (fix TecDeA) ──
+  // El SDK puede quedarse COLGADO (sin éxito ni fallo) durante mucho tiempo
+  // cuando la red bloquea sus WebSockets/long-polling — por ejemplo al abrir
+  // el archivo en local (file://) o tras un cortafuegos intermitente. Sin
+  // cota, la app permanecería en «Cargando aplicaciones…» indefinidamente.
+  // Si el SDK no contesta en GET_TIMEOUT_MS, se declara rechazado y loadData
+  // dispara el plan B REST, que resuelve rápido por HTTPS normal. Si el SDK
+  // contesta a tiempo, el comportamiento es exactamente el de siempre.
+  const GET_TIMEOUT_MS = 3000;
+  function getWithTimeout(ref_, ms = GET_TIMEOUT_MS) {
+    return Promise.race([
+      get(ref_),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`get() sin respuesta en ${ms} ms`)), ms)
+      )
+    ]);
+  }
+
   // ── Carga inicial ──────────────────────────────────────
   // IMPORTANTE: usamos Promise.allSettled (no Promise.all) para que el fallo
   // de una ruta (p. ej. permisos en reglas de Firebase sobre 'admins' o
@@ -225,10 +273,10 @@
   // demás (apps, etc.). Antes, un único get rechazado vaciaba toda la carga.
   async function loadData() {
     const results = await Promise.allSettled([
-      get(appsRef),
-      get(adminsRef),
-      get(groupPassRef),
-      get(legacyAdminRef)
+      getWithTimeout(appsRef),
+      getWithTimeout(adminsRef),
+      getWithTimeout(groupPassRef),
+      getWithTimeout(legacyAdminRef)
     ]);
 
     // Apps — siempre se procesa aunque las demás fallen
@@ -241,8 +289,30 @@
         // Migración de la antigua categoría «administrativa» a «recursos»
         apps = apps.map(migrateAppCategories);
       }
+      // Carga inicial de apps completada (con o sin datos): a partir de ahora
+      // se permite guardar en Firebase. — fix TecDeA
+      _appsLoaded = true;
     } else {
-      console.warn("No se pudo cargar 'apps' desde Firebase:", results[0].reason);
+      // La lectura por SDK falló (red, reglas de seguridad…). Plan B:
+      // reintentar por la API REST (HTTPS puro) antes de dar la carga por
+      // perdida. Si REST también falla, se marca el intento como terminado
+      // PERO también como fallido, para bloquear escrituras que
+      // sobrescribirían la BD con el estado local vacío y para avisar con
+      // claridad en los perfiles. — fix TecDeA
+      try {
+        const restVal = await restGet("apps");
+        if (restVal) {
+          apps = normalizeList(restVal);
+          apps = apps.filter(a => a && typeof a === "object");
+          apps = apps.map(migrateAppCategories);
+        }
+        _appsLoaded = true;
+        console.info("'apps' cargado vía API REST (plan B) tras fallo del SDK. Nº apps:", apps.length);
+      } catch (restErr) {
+        _appsLoaded = true;
+        _appsLoadFailed = true;
+        console.warn("No se pudo cargar 'apps' desde Firebase (SDK y REST):", results[0].reason, restErr);
+      }
     }
 
     // Administradores (multi-admin) — con migración legacy
@@ -252,7 +322,15 @@
       const list = normalizeList(v).filter(a => a && a.user && a.pass);
       if (list.length > 0) admins = list;
     } else {
-      console.warn("No se pudo cargar 'admins' desde Firebase:", results[1].reason);
+      // Plan B vía REST para admins. — fix TecDeA
+      try {
+        const restVal = await restGet("admins");
+        const list = normalizeList(restVal).filter(a => a && a.user && a.pass);
+        if (list.length > 0) admins = list;
+        console.info("'admins' cargado vía API REST (plan B).");
+      } catch (restErr) {
+        console.warn("No se pudo cargar 'admins' desde Firebase (SDK y REST):", results[1].reason, restErr);
+      }
     }
     // Migración desde versión anterior (admin único) si no había lista nueva
     if (admins.length === 0 && results[3].status === "fulfilled") {
@@ -262,7 +340,14 @@
         admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
       }
     } else if (admins.length === 0 && results[3].status === "rejected") {
-      console.warn("No se pudo cargar 'admin' (legacy) desde Firebase:", results[3].reason);
+      // Plan B vía REST para el admin legacy. — fix TecDeA
+      try {
+        const restVal = await restGet("admin");
+        if (restVal) admins = [{ user: restVal.user || "admin", pass: restVal.pass || "admin" }];
+        console.info("'admin' (legacy) cargado vía API REST (plan B).");
+      } catch (restErr) {
+        console.warn("No se pudo cargar 'admin' (legacy) desde Firebase (SDK y REST):", results[3].reason, restErr);
+      }
     }
     // Garantía final: siempre al menos un admin por defecto
     if (admins.length === 0) admins = [{ user: "admin", pass: "admin" }];
@@ -280,7 +365,19 @@
         };
       }
     } else {
-      console.warn("No se pudo cargar 'groupPasswords' desde Firebase:", results[2].reason);
+      // Plan B vía REST para las contraseñas de perfil. — fix TecDeA
+      try {
+        const gp = (await restGet("groupPasswords")) || {};
+        groupPasswords = {
+          profesorado: gp.profesorado || "",
+          gestion:     gp.gestion     || "",
+          recursos:    gp.recursos    || gp.administrativa || "",
+          ia:          gp.ia          || ""
+        };
+        console.info("'groupPasswords' cargado vía API REST (plan B).");
+      } catch (restErr) {
+        console.warn("No se pudo cargar 'groupPasswords' desde Firebase (SDK y REST):", results[2].reason, restErr);
+      }
     }
 
     // Estado inicial conocido: evita un guardado/toast fantasma al primer blur
@@ -295,8 +392,19 @@
       buildConfigTable();
       buildAdminsTable();
       fillGroupPasswordInputs();
+    } else if (_currentGroup && !document.getElementById("view-group").classList.contains("hidden")) {
+      // El usuario ya está viendo un perfil: refrescarlo con los datos recién
+      // llegados en lugar de expulsarlo a la portada. — fix TecDeA
+      showGroup(_currentGroup);
     } else {
       renderHome();
+      // Si el usuario pulsó un perfil antes de que terminara la carga,
+      // continuar ahora con el flujo normal (contraseña si procede). — fix TecDeA
+      if (_pendingOpenGroup) {
+        const g = _pendingOpenGroup;
+        _pendingOpenGroup = null;
+        requestGroupAccess(g);
+      }
     }
 
     // Aviso al usuario si alguna ruta de Firebase no se pudo leer
@@ -332,15 +440,32 @@
   }
 
   async function saveApps(payload) {
+    // ⛔ Protección anti-pérdida (fix TecDeA): bloquear escrituras hasta que la
+    // carga inicial haya terminado. Escribir el estado local (vacío o parcial)
+    // antes de tiempo sustituiría la lista real de la base de datos.
+    if (!_appsLoaded) {
+      console.warn("[Portal IES] saveApps bloqueado: los datos aún no se han cargado de Firebase.");
+      return false;
+    }
     const list = payload || apps;
     try { await withTimeout(set(appsRef, list), 5000); markAppsAsSaved(list); return true; }
     catch(e) { console.error("Error guardando apps:", e); return false; }
   }
   async function saveAdmins() {
+    // ⛔ Misma protección anti-pérdida que saveApps. — fix TecDeA
+    if (!_appsLoaded) {
+      console.warn("[Portal IES] saveAdmins bloqueado: los datos aún no se han cargado de Firebase.");
+      return false;
+    }
     try { await set(adminsRef, admins); return true; }
     catch(e) { console.error("Error guardando admins:", e); return false; }
   }
   async function saveGroupPasswords() {
+    // ⛔ Misma protección anti-pérdida que saveApps. — fix TecDeA
+    if (!_appsLoaded) {
+      console.warn("[Portal IES] saveGroupPasswords bloqueado: los datos aún no se han cargado de Firebase.");
+      return false;
+    }
     try { await set(groupPassRef, groupPasswords); return true; }
     catch(e) { console.error("Error guardando groupPasswords:", e); return false; }
   }
@@ -350,6 +475,7 @@
   // ══════════════════════════════════════════════════════
 
   function renderHome() {
+    _currentGroup = null;   // ya no estamos en ninguna vista de grupo — fix TecDeA
     setView("home");
     // Mostrar botón de configuración al volver al home
     document.querySelector('.btn-config')?.classList.remove('hidden');
@@ -357,6 +483,15 @@
 
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
   function requestGroupAccess(group) {
+    // Carga inicial aún en curso: avisar, recordar el perfil pulsado y abrirlo
+    // automáticamente (con su contraseña si procede) al terminar la carga.
+    // Evita el mensaje engañoso «no hay aplicaciones» durante el arranque.
+    // — fix TecDeA
+    if (!_appsLoaded) {
+      _pendingOpenGroup = group;
+      showToast("⏳ Cargando aplicaciones…", "", 2500);
+      return;
+    }
     const expected = groupPasswords[group];
     // Si no hay contraseña configurada para este perfil → acceso directo, sin modal
     if (!expected) {
@@ -400,24 +535,68 @@
   }
 
   function showGroup(group) {
+    _currentGroup = group;   // recordar el grupo mostrado (fix TecDeA)
+    const grid     = document.getElementById("appGrid");
+
+    // Carga inicial aún en curso: pantalla de carga en lugar del mensaje
+    // engañoso «no hay aplicaciones». Al terminar la carga, loadData vuelve a
+    // llamar a showGroup con los datos reales. — fix TecDeA
+    if (!_appsLoaded) {
+      grid.innerHTML = "<p class='empty'>⏳ Cargando aplicaciones…</p>";
+      document.getElementById("groupTitle").textContent = groupLabel(group);
+      setView("group");
+      document.querySelector('.btn-config')?.classList.remove('hidden');
+      return;
+    }
+
+    // Lectura inicial de Firebase FALLIDA (red, reglas…): mensaje honesto.
+    // Antes se mostraba «No hay aplicaciones configuradas para este grupo»,
+    // lo que confundía al administrador pensando que había perdido los datos.
+    // — fix TecDeA
+    if (_appsLoadFailed) {
+      grid.innerHTML = "<p class='empty'>⚠ No se pudieron cargar las aplicaciones desde Firebase.<br><small>Comprueba tu conexión a internet. Los datos NO se han borrado: siguen intactos en la base de datos.</small><br><button id='btnRetryLoad' class='main-btn' style='margin-top:.9rem;'>↻ Reintentar la carga</button></p>";
+      document.getElementById("btnRetryLoad")?.addEventListener("click", () => {
+        // Reintento manual: reactiva el estado de carga y relanza loadData.
+        // Al terminar, loadData volverá a pintar este perfil con los datos
+        // (o con el mensaje de fallo si sigue sin haber conexión). — fix TecDeA
+        _appsLoadFailed = false;
+        _appsLoaded = false;
+        document.getElementById("appGrid").innerHTML = "<p class='empty'>⏳ Cargando aplicaciones…</p>";
+        loadData();
+      });
+      document.getElementById("groupTitle").textContent = groupLabel(group);
+      setView("group");
+      document.querySelector('.btn-config')?.classList.remove('hidden');
+      return;
+    }
+
     // Solo apps ACTIVAS: las desactivadas por el administrador no se muestran
     // en el perfil (isAppActive: apps sin la propiedad «active» = activas)
     let filtered = apps.filter(a => a[group] && isAppActive(a));
+    // Nº de apps del perfil que existen pero están desactivadas (Act. sin marcar)
+    const hiddenInactive = apps.filter(a => a[group] && !isAppActive(a)).length;
     // Ordenar alfabéticamente por nombre (case-insensitive, español)
     filtered.sort((a, b) => {
       const va = (a.name || "").toString().toLowerCase().trim();
       const vb = (b.name || "").toString().toLowerCase().trim();
       return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
     });
-    const grid     = document.getElementById("appGrid");
-    grid.innerHTML = filtered.length
-      ? filtered.map(a => appCard(a)).join("")
-      : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
+    if (filtered.length) {
+      grid.innerHTML = filtered.map(a => appCard(a)).join("")
+        + (hiddenInactive
+          ? `<p class='empty' style="grid-column:1/-1;font-size:.85rem;opacity:.75;">ℹ️ ${hiddenInactive} ${hiddenInactive === 1 ? "aplicación" : "aplicaciones"} más de este perfil ${hiddenInactive === 1 ? "está desactivada" : "están desactivadas"} en Configuración (casilla «Act.» sin marcar).</p>`
+          : "");
+    } else {
+      // Mensaje diagnóstico: distinguir «perfil realmente vacío» de «hay apps
+      // del perfil pero todas desactivadas con la casilla Act.» (fuente
+      // habitual de confusión). — fix TecDeA
+      grid.innerHTML = hiddenInactive
+        ? `<p class='empty'>No hay aplicaciones activas de este perfil.<br><small>Hay ${hiddenInactive} ${hiddenInactive === 1 ? "aplicación" : "aplicaciones"} de «${groupLabel(group)}» en la base de datos, pero ${hiddenInactive === 1 ? "está desactivada" : "están desactivadas"} (casilla «Act.» sin marcar en Configuración).</small></p>`
+        : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
+    }
 
     document.getElementById("groupTitle").textContent = groupLabel(group);
     setView("group");
-    // Asegurar que el botón Configuración sea visible en las vistas de grupo
-    document.querySelector('.btn-config')?.classList.remove('hidden');
     // Asegurar que el botón Configuración sea visible en las vistas de grupo
     document.querySelector('.btn-config')?.classList.remove('hidden');
 
@@ -778,6 +957,11 @@
   async function discoverIcons(img, appUrl) {
     // Si ya cargó OK, no tocar
     if (img.complete && img.naturalWidth > 0) return;
+
+    // En file:// (prueba local con doble clic) TODOS estos fetch a terceros
+    // fallan por CORS (origen «null») y solo generan decenas de errores en
+    // la consola que confunden el diagnóstico real. Se omiten. — fix TecDeA
+    if (location.protocol === "file:") return;
 
     // Marcar como procesando para evitar llamadas duplicadas (mejora TecDeA)
     if (img.dataset.iconProcessing === 'true') return;
@@ -1207,6 +1391,11 @@
   // Resultado de un intento de guardado → toast adecuado
   function notifyPersistResult(res) {
     if (!res) return;
+    if (res.blocked) {
+      // Guardado bloqueado por carga inicial en curso (anti-pérdida). — fix TecDeA
+      showToast("⏳ Los datos aún se están cargando. Espera a que finalice la carga antes de editar.", "err", 5000);
+      return;
+    }
     if (!res.ok) { showToast("Error al guardar en Firebase.", "err", 4000); return; }
     if (res.uncategorized && res.uncategorized.length > 0) showUncategorizedToast(res.uncategorized, res.saved);
     else if (res.saved) showToast("✓ Guardado", "ok", 1000);
@@ -1216,6 +1405,12 @@
   // de casillas. Persiste lo que pueda sin dar de alta filas nuevas incompletas
   // y sin bloquearse por las apps sin categorizar.
   async function persistAppsChanges() {
+    // ⛔ Protección anti-pérdida: no escribir NUNCA si la carga inicial no ha
+    // terminado (Firebase lento/caído). — fix TecDeA
+    if (!_appsLoaded) {
+      console.warn("[Portal IES] Autoguardado bloqueado: los datos aún no se han cargado de Firebase.");
+      return { ok: false, blocked: true, saved: false, uncategorized: [] };
+    }
     const json = JSON.stringify(apps);
     const uncategorized = getUncategorizedApps();
     const payload = autoSavePayload(apps, isAppResident);
@@ -1596,6 +1791,12 @@
   }
 
   async function saveConfig() {
+    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
+    // — fix TecDeA
+    if (!_appsLoaded) {
+      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
+      return;
+    }
     collectTableData();
     // Validación obligatoria: cada app con nombre debe tener al menos una categoría
     const uncategorized = getUncategorizedApps();
@@ -1703,6 +1904,12 @@
   };
 
   async function saveAdminsConfig() {
+    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
+    // — fix TecDeA
+    if (!_appsLoaded) {
+      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
+      return;
+    }
     collectAdminsData();
     const cleaned = admins.filter(a => a.user && a.pass);
     if (cleaned.length === 0) {
@@ -1742,6 +1949,12 @@
   }
 
   async function saveGroupPasswordsConfig() {
+    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
+    // — fix TecDeA
+    if (!_appsLoaded) {
+      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
+      return;
+    }
     groupPasswords = {
       profesorado: document.getElementById("passProfesorado").value,
       gestion:     document.getElementById("passGestion").value,
