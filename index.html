@@ -64,10 +64,10 @@
 
   // ── Identificador de versión visible (fix TecDeA) ─────────────
   // Permite verificar SIEMPRE qué versión está ejecutando el navegador:
-  // aparece en la consola (F12), en el pie de la portada y en los mensajes
-  // de error. Si NO ves esta versión, el navegador está sirviendo una
-  // página antigua (caché o Service Worker) → Ctrl+F5 / Ctrl+Mayús+R.
-  const PORTAL_VERSION = "v2026-09-06-r5 (fix TecDeA: REST fresco primero + doble submit + race + watchdog)";
+  // aparece en la consola (F12) y en los mensajes de error. Si NO ves esta
+  // versión, el navegador está sirviendo una página antigua (caché o
+  // Service Worker) → Ctrl+F5 / Ctrl+Mayús+R.
+  const PORTAL_VERSION = "v2026-09-06-r6 (fix TecDeA: REST fresco primero + doble submit + race + watchdog)";
   window.PORTAL_VERSION = PORTAL_VERSION;
   try {
     console.info("%cPortal IES " + PORTAL_VERSION, "background:#1e293b;color:#7dd3fc;padding:2px 8px;border-radius:4px;font-weight:bold");
@@ -614,16 +614,12 @@
       return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
     });
     if (filtered.length) {
-      grid.innerHTML = filtered.map(a => appCard(a)).join("")
-        + (hiddenInactive
-          ? `<p class='empty' style="grid-column:1/-1;font-size:.85rem;opacity:.75;">ℹ️ ${hiddenInactive} ${hiddenInactive === 1 ? "aplicación" : "aplicaciones"} más de este perfil ${hiddenInactive === 1 ? "está desactivada" : "están desactivadas"} en Configuración (casilla «Act.» sin marcar).</p>`
-          : "");
+      grid.innerHTML = filtered.map(a => appCard(a)).join("");
     } else {
-      // Mensaje diagnóstico: distinguir «perfil realmente vacío» de «hay apps
-      // del perfil pero todas desactivadas con la casilla Act.» (fuente
-      // habitual de confusión). — fix TecDeA
+      // Distinguir «perfil realmente vacío» de «perfil con todas sus apps
+      // desactivadas» — sin explicaciones visibles (petición del usuario).
       grid.innerHTML = hiddenInactive
-        ? `<p class='empty'>No hay aplicaciones activas de este perfil.<br><small>Hay ${hiddenInactive} ${hiddenInactive === 1 ? "aplicación" : "aplicaciones"} de «${groupLabel(group)}» en la base de datos, pero ${hiddenInactive === 1 ? "está desactivada" : "están desactivadas"} (casilla «Act.» sin marcar en Configuración).</small></p>`
+        ? "<p class='empty'>No hay aplicaciones activas de este perfil.</p>"
         : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
     }
 
@@ -3143,12 +3139,6 @@
   };
 
   // ── Arranque ──────────────────────────────────────────
-  // Sello de versión visible en la portada (fix TecDeA)
-  try {
-    const stamp = document.getElementById('portalVersionStamp');
-    if (stamp) stamp.textContent = 'Portal ' + PORTAL_VERSION + ' · si sigues viendo esta línea tras una actualización, pulsa Ctrl+F5';
-  } catch (e) {}
-
   loadData();
 
   // ── Perro guardián de la carga inicial (fix TecDeA) ────
@@ -4848,9 +4838,6 @@
       </button>
     </div>
 
-    <!-- Sello de versión (fix TecDeA): permite verificar en pantalla qué
-         versión está ejecutando el navegador sin abrir la consola. -->
-    <p id="portalVersionStamp" style="opacity:.55;font-size:.72rem;margin-top:1.4rem;"></p>
   </section>
 
   <!-- Vista: GRUPO -->
