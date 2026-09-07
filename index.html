@@ -372,6 +372,10 @@
     document.getElementById("groupPassError").textContent = "";
     document.getElementById("groupPassInput").value = "";
     document.getElementById("groupPassModal").classList.remove("hidden");
+    // Foco INMEDIATO: con solo el setTimeout de 50ms, quien tecleaba muy
+    // rápido perdía las primeras letras (iban a ninguna parte). Se conserva
+    // el reenfoque a 50ms por si la animación del modal roba el foco.
+    document.getElementById("groupPassInput").focus();
     setTimeout(() => document.getElementById("groupPassInput").focus(), 50);
   }
 
@@ -381,9 +385,15 @@
   }
 
   function doGroupLogin() {
-    const input   = document.getElementById("groupPassInput").value;
-    const expected = groupPasswords[pendingGroup];
     const g = pendingGroup;
+    // Guarda anti doble-disparo: al pulsar Enter, el handler de teclado del
+    // input Y el submit del formulario podían invocar esto DOS veces. La 1ª
+    // llamada hacía login y ponía pendingGroup = null; la 2ª entraba con
+    // g = null → showGroup(undefined) VACIABA la parrilla («No hay aplicaciones
+    // configuradas para este grupo») justo después de entrar correctamente.
+    if (!g) return;
+    const input   = document.getElementById("groupPassInput").value;
+    const expected = groupPasswords[g];
     if (!expected) {
       // Sin contraseña configurada → acceso libre (con aviso en consola)
       console.warn("Perfil sin contraseña configurada. Acceso libre.");
@@ -401,6 +411,9 @@
   }
 
   function showGroup(group) {
+    // Guarda defensiva: un grupo inválido (p. ej. undefined tras un doble
+    // disparo) NO debe poder vaciar la parrilla en pantalla
+    if (!GROUP_KEYS.includes(group)) return;
     // Solo apps ACTIVAS: las desactivadas por el administrador no se muestran
     // en el perfil (isAppActive: apps sin la propiedad «active» = activas)
     let filtered = apps.filter(a => a[group] && isAppActive(a));
@@ -988,6 +1001,14 @@
           // Los checkboxes (perfiles y «Act.») afectan a los contadores
           // de la barra de filtros: refrescarlos al vuelo
           updateFilterCounts();
+          // Con filtros activos, la fila puede dejar de cumplirlos (o empezar
+          // a cumplirlos): reconstruir la tabla al vuelo para que el cambio
+          // se refleje INMEDIATAMENTE en pantalla (p. ej., desmarcar «Prof.»
+          // con el filtro Profesorado activo hace desaparecer la fila ya).
+          // Sin filtros no hace falta reconstruir (solo resaltado al vuelo).
+          if (appsFilter !== 'all' || appsStateFilter !== 'all') {
+            buildConfigTable();
+          }
           persistAppsChanges().then(notifyPersistResult);
         }
       });
@@ -4950,8 +4971,7 @@
     <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="on">
       <input type="text" name="username" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true">
       <div class="fi-label">Contraseña</div>
-      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter') ies.doGroupLogin()">
+      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="current-password">
       <div id="groupPassError" class="modal-error"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeGroupPassModal()">Cancelar</button>
