@@ -62,17 +62,6 @@
   const DEFAULT_DB_URL = "https://iesvdv-96a18-default-rtdb.europe-west1.firebasedatabase.app";
   const URL_PREFIX = "https://iesvilladiego.github.io/";
 
-  // ── Identificador de versión visible (fix TecDeA) ─────────────
-  // Permite verificar SIEMPRE qué versión está ejecutando el navegador:
-  // aparece en la consola (F12) y en los mensajes de error. Si NO ves esta
-  // versión, el navegador está sirviendo una página antigua (caché o
-  // Service Worker) → Ctrl+F5 / Ctrl+Mayús+R.
-  const PORTAL_VERSION = "v2026-09-06-r6 (fix TecDeA: REST fresco primero + doble submit + race + watchdog)";
-  window.PORTAL_VERSION = PORTAL_VERSION;
-  try {
-    console.info("%cPortal IES " + PORTAL_VERSION, "background:#1e293b;color:#7dd3fc;padding:2px 8px;border-radius:4px;font-weight:bold");
-  } catch (e) {}
-
   // ── Mapeo palabras-clave → emoji para iconos auto-generados ──
   // Si el texto de la descripción contiene alguna de estas palabras,
   // se usa el emoji correspondiente como icono de fallback.
@@ -194,24 +183,9 @@
   let admins    = [{ user: "admin", pass: "admin" }];           // Multi-administrador
   let groupPasswords = { profesorado: "", gestion: "", recursos: "", ia: "" };
   let pendingGroup = null;   // Grupo pendiente de validar contraseña
-  let appsFilter = 'all';   // Filtro activo en la pantalla de Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
+  let appsFilter = 'all';        // Filtro de PERFIL en Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
+  let appsStateFilter = 'all';   // Filtro de ESTADO (combinable con el de perfil): 'all' | '_active' | '_inactive'
   let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
-
-  // ── Estado de carga y anti-pérdida de datos (fix TecDeA) ──
-  // _appsLoaded: la lectura inicial de apps ha terminado (con o sin éxito).
-  // Hasta que sea true se BLOQUEA cualquier escritura en Firebase para que un
-  // estado local vacío/incompleto (Firebase lento, caído o sin permisos de
-  // lectura) no pueda vaciar ni sobrescribir la lista real de la base de datos.
-  let _appsLoaded = false;
-  // _appsLoadFailed: la lectura inicial de apps FALLÓ (red/reglas). Permite
-  // mostrar un mensaje honesto en los perfiles en lugar de «no hay aplicaciones».
-  let _appsLoadFailed = false;
-  // Grupo mostrado actualmente en la vista de grupo (para refrescarlo si la
-  // carga termina con la vista ya abierta, sin expulsar al usuario a la portada).
-  let _currentGroup = null;
-  // Perfil pulsado antes de que terminara la carga inicial: se abre
-  // automáticamente (con su contraseña si procede) al completarse la carga.
-  let _pendingOpenGroup = null;
 
   // Claves de grupos/categorías. Fuente única de verdad:
   // añadir aquí un nuevo grupo lo habilita en toda la app (tablas, filtros, validación…).
@@ -245,149 +219,69 @@
     return a;
   }
 
-  // ── Plan B: lectura vía API REST de Firebase RTDB (fix TecDeA) ──
-  // El SDK de Firebase usa WebSockets (y long-polling como alternativa). En
-  // algunas redes (cortafuegos escolares, antivirus con «escudo web», proxies
-  // o DNS corporativos) esas conexiones se bloquean o se cortan de forma
-  // intermitente, mientras que el HTTPS normal sí funciona. Para ese caso,
-  // si la lectura por SDK falla se reintenta la MISMA lectura por la API REST
-  // de la base de datos (HTTPS puro). Solo lectura: el plan B nunca escribe
-  // en la BD, así que no puede alterar los datos.
-  const REST_TIMEOUT_MS = 4000;
-  async function restGet(path) {
-    // Con AbortController acotamos CADA intento REST a 4 s: si la red
-    // «engulle» los paquetes (cortafuegos silencioso), fetch se quedaría
-    // colgado minutos y la app permanecería en «Cargando…» para siempre.
-    // Con la cota, a los 4 s se aborta y loadData puede mostrar el error
-    // honesto con botón de reintento. — fix TecDeA
-    const attempt = async () => {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), REST_TIMEOUT_MS);
-      try {
-        const res = await fetch(`${DEFAULT_DB_URL}/${ROOT}/${path}.json`, { cache: "no-store", signal: ctrl.signal });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return res.json();
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-    try {
-      return await attempt();
-    } catch (firstErr) {
-      // Un único reintento: algunos cortafuegos dejan pasar la 2ª petición.
-      try {
-        return await attempt();
-      } catch (secondErr) {
-        throw firstErr;
-      }
-    }
-  }
-
-  // ── Cota de tiempo para la lectura por SDK (fix TecDeA) ──
-  // El SDK puede quedarse COLGADO (sin éxito ni fallo) durante mucho tiempo
-  // cuando la red bloquea sus WebSockets/long-polling — por ejemplo al abrir
-  // el archivo en local (file://) o tras un cortafuegos intermitente. Sin
-  // cota, la app permanecería en «Cargando aplicaciones…» indefinidamente.
-  // Si el SDK no contesta en GET_TIMEOUT_MS, se declara rechazado y loadData
-  // dispara el plan B REST, que resuelve rápido por HTTPS normal. Si el SDK
-  // contesta a tiempo, el comportamiento es exactamente el de siempre.
-  const GET_TIMEOUT_MS = 3000;
-  function getWithTimeout(ref_, ms = GET_TIMEOUT_MS) {
-    return Promise.race([
-      get(ref_),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`get() sin respuesta en ${ms} ms`)), ms)
-      )
-    ]);
-  }
-
   // ── Carga inicial ──────────────────────────────────────
   // IMPORTANTE: usamos Promise.allSettled (no Promise.all) para que el fallo
   // de una ruta (p. ej. permisos en reglas de Firebase sobre 'admins' o
   // 'groupPasswords' que todavía no estaban creadas) NO impida cargar las
   // demás (apps, etc.). Antes, un único get rechazado vaciaba toda la carga.
-  //
-  // ── Lectura inicial FRESCA: REST primero, SDK de respaldo — fix TecDeA r5 ──
-  // El SDK de RTDB puede resolver get() DESDE SU CACHÉ LOCAL (IndexedDB) con
-  // datos OBSOLETOS cuando sus conexiones (WebSocket/long-polling) están
-  // bloqueadas o intermitentes: responde al instante… pero con valores viejos.
-  // Eso producía el patrón «clave rápida = falla / clave lenta = funciona»:
-  // el modal se abría con la contraseña antigua cacheada y las apps que
-  // llegaban después iban también desfasadas. La API REST (HTTPS puro con
-  // cache: no-store) SIEMPRE devuelve el estado VIGENTE de la base de datos,
-  // así que ahora es la vía PRIMARIA; el SDK queda como respaldo por si REST
-  // estuviera bloqueado (caso inverso, más raro).
-  async function freshGet(path, ref_) {
-    try {
-      const val = await restGet(path);
-      return { val: val ?? null, via: "rest" };
-    } catch (restErr) {
-      const snap = await getWithTimeout(ref_);
-      return { val: snap.exists() ? snap.val() : null, via: "sdk" };
-    }
-  }
-
   async function loadData() {
     const results = await Promise.allSettled([
-      freshGet("apps", appsRef),
-      freshGet("admins", adminsRef),
-      freshGet("groupPasswords", groupPassRef),
-      freshGet("admin", legacyAdminRef)
+      get(appsRef),
+      get(adminsRef),
+      get(groupPassRef),
+      get(legacyAdminRef)
     ]);
 
     // Apps — siempre se procesa aunque las demás fallen
     if (results[0].status === "fulfilled") {
-      const v = results[0].value.val;
-      if (v) {
-        apps = normalizeList(v);
+      const snap = results[0].value;
+      if (snap.exists()) {
+        apps = normalizeList(snap.val());
         // Limpieza defensiva: descartar entradas que no sean objetos válidos
         apps = apps.filter(a => a && typeof a === "object");
         // Migración de la antigua categoría «administrativa» a «recursos»
         apps = apps.map(migrateAppCategories);
       }
-      // Carga inicial de apps completada (con o sin datos): a partir de ahora
-      // se permite guardar en Firebase. — fix TecDeA
-      _appsLoaded = true;
-      console.info("[Portal IES] 'apps' cargado vía " + results[0].value.via + " (fresco). Nº apps: " + apps.length);
     } else {
-      // REST y SDK fallaron: se marca el intento como terminado PERO también
-      // como fallido, para bloquear escrituras que sobrescribirían la BD con
-      // el estado local vacío y para avisar con claridad en los perfiles.
-      // — fix TecDeA
-      _appsLoaded = true;
-      _appsLoadFailed = true;
-      console.warn("No se pudo cargar 'apps' desde Firebase (REST y SDK):", results[0].reason);
+      console.warn("No se pudo cargar 'apps' desde Firebase:", results[0].reason);
     }
 
-    // Administradores (multi-admin) — con migración legacy — fix TecDeA r5
+    // Administradores (multi-admin) — con migración legacy
     if (results[1].status === "fulfilled") {
-      const list = normalizeList(results[1].value.val).filter(a => a && a.user && a.pass);
+      const snap = results[1].value;
+      const v = snap.exists() ? snap.val() : null;
+      const list = normalizeList(v).filter(a => a && a.user && a.pass);
       if (list.length > 0) admins = list;
     } else {
-      console.warn("No se pudo cargar 'admins' desde Firebase (REST y SDK):", results[1].reason);
+      console.warn("No se pudo cargar 'admins' desde Firebase:", results[1].reason);
     }
     // Migración desde versión anterior (admin único) si no había lista nueva
     if (admins.length === 0 && results[3].status === "fulfilled") {
-      const a = results[3].value.val;
-      if (a) admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
+      const snap = results[3].value;
+      if (snap.exists()) {
+        const a = snap.val();
+        admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
+      }
     } else if (admins.length === 0 && results[3].status === "rejected") {
-      console.warn("No se pudo cargar 'admin' (legacy) desde Firebase (REST y SDK):", results[3].reason);
+      console.warn("No se pudo cargar 'admin' (legacy) desde Firebase:", results[3].reason);
     }
     // Garantía final: siempre al menos un admin por defecto
     if (admins.length === 0) admins = [{ user: "admin", pass: "admin" }];
 
-    // Contraseñas por perfil — fix TecDeA r5 (REST fresco primero)
+    // Contraseñas por perfil
     if (results[2].status === "fulfilled") {
-      const gp = results[2].value.val || {};
-      groupPasswords = {
-        profesorado: gp.profesorado || "",
-        gestion:     gp.gestion     || "",
-        recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
-        ia:          gp.ia          || ""
-      };
-      console.info("[Portal IES] 'groupPasswords' cargado vía " + results[2].value.via + " (fresco).");
+      const snap = results[2].value;
+      if (snap.exists()) {
+        const gp = snap.val() || {};
+        groupPasswords = {
+          profesorado: gp.profesorado || "",
+          gestion:     gp.gestion     || "",
+          recursos:    gp.recursos    || gp.administrativa || "",  // migración clave antigua
+          ia:          gp.ia          || ""
+        };
+      }
     } else {
-      console.warn("No se pudo cargar 'groupPasswords' desde Firebase (REST y SDK):", results[2].reason);
+      console.warn("No se pudo cargar 'groupPasswords' desde Firebase:", results[2].reason);
     }
 
     // Estado inicial conocido: evita un guardado/toast fantasma al primer blur
@@ -402,19 +296,8 @@
       buildConfigTable();
       buildAdminsTable();
       fillGroupPasswordInputs();
-    } else if (_currentGroup && !document.getElementById("view-group").classList.contains("hidden")) {
-      // El usuario ya está viendo un perfil: refrescarlo con los datos recién
-      // llegados en lugar de expulsarlo a la portada. — fix TecDeA
-      showGroup(_currentGroup);
     } else {
       renderHome();
-      // Si el usuario pulsó un perfil antes de que terminara la carga,
-      // continuar ahora con el flujo normal (contraseña si procede). — fix TecDeA
-      if (_pendingOpenGroup) {
-        const g = _pendingOpenGroup;
-        _pendingOpenGroup = null;
-        requestGroupAccess(g);
-      }
     }
 
     // Aviso al usuario si alguna ruta de Firebase no se pudo leer
@@ -450,32 +333,15 @@
   }
 
   async function saveApps(payload) {
-    // ⛔ Protección anti-pérdida (fix TecDeA): bloquear escrituras hasta que la
-    // carga inicial haya terminado. Escribir el estado local (vacío o parcial)
-    // antes de tiempo sustituiría la lista real de la base de datos.
-    if (!_appsLoaded) {
-      console.warn("[Portal IES] saveApps bloqueado: los datos aún no se han cargado de Firebase.");
-      return false;
-    }
     const list = payload || apps;
     try { await withTimeout(set(appsRef, list), 5000); markAppsAsSaved(list); return true; }
     catch(e) { console.error("Error guardando apps:", e); return false; }
   }
   async function saveAdmins() {
-    // ⛔ Misma protección anti-pérdida que saveApps. — fix TecDeA
-    if (!_appsLoaded) {
-      console.warn("[Portal IES] saveAdmins bloqueado: los datos aún no se han cargado de Firebase.");
-      return false;
-    }
     try { await set(adminsRef, admins); return true; }
     catch(e) { console.error("Error guardando admins:", e); return false; }
   }
   async function saveGroupPasswords() {
-    // ⛔ Misma protección anti-pérdida que saveApps. — fix TecDeA
-    if (!_appsLoaded) {
-      console.warn("[Portal IES] saveGroupPasswords bloqueado: los datos aún no se han cargado de Firebase.");
-      return false;
-    }
     try { await set(groupPassRef, groupPasswords); return true; }
     catch(e) { console.error("Error guardando groupPasswords:", e); return false; }
   }
@@ -485,7 +351,6 @@
   // ══════════════════════════════════════════════════════
 
   function renderHome() {
-    _currentGroup = null;   // ya no estamos en ninguna vista de grupo — fix TecDeA
     setView("home");
     // Mostrar botón de configuración al volver al home
     document.querySelector('.btn-config')?.classList.remove('hidden');
@@ -493,15 +358,6 @@
 
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
   function requestGroupAccess(group) {
-    // Carga inicial aún en curso: avisar, recordar el perfil pulsado y abrirlo
-    // automáticamente (con su contraseña si procede) al terminar la carga.
-    // Evita el mensaje engañoso «no hay aplicaciones» durante el arranque.
-    // — fix TecDeA
-    if (!_appsLoaded) {
-      _pendingOpenGroup = group;
-      showToast("⏳ Cargando aplicaciones…", "", 2500);
-      return;
-    }
     const expected = groupPasswords[group];
     // Si no hay contraseña configurada para este perfil → acceso directo, sin modal
     if (!expected) {
@@ -525,18 +381,6 @@
   }
 
   function doGroupLogin() {
-    // ⛔ Guardia anti-doble-ejecución (fix TecDeA r4): pulsar ENTER disparaba
-    // DOS veces esta función (onkeydown del input + submit implícito del
-    // <form>). La 1ª llamada validaba y CERRABA el modal (pendingGroup=null),
-    // y la 2ª entraba en la rama «sin contraseña» con pendingGroup null →
-    // showGroup(null) → cuadrícula vacía pisando el render correcto. Ese era
-    // el bug de «clave rápida = no se ven las apps». Cualquier llamada sin
-    // grupo pendiente es un eco y se ignora.
-    if (!pendingGroup) {
-      console.warn("[Portal IES] doGroupLogin ignorado: no hay grupo pendiente (posible doble envío). — fix TecDeA r4");
-      closeGroupPassModal();
-      return;
-    }
     const input   = document.getElementById("groupPassInput").value;
     const expected = groupPasswords[pendingGroup];
     const g = pendingGroup;
@@ -546,11 +390,9 @@
       closeGroupPassModal();
       showGroup(g);
     } else if (input === expected) {
-      console.info("[Portal IES] doGroupLogin OK → showGroup(" + g + ")");
       closeGroupPassModal();
       showGroup(g);
     } else {
-      console.warn("[Portal IES] doGroupLogin: contraseña incorrecta (len=" + input.length + ", esperada.len=" + (expected || "").length + ", pendingGroup=" + pendingGroup + ").");
       document.getElementById("groupPassError").textContent = "Contraseña incorrecta.";
       const inp = document.getElementById("groupPassInput");
       inp.value = "";
@@ -559,72 +401,24 @@
   }
 
   function showGroup(group) {
-    // ⛔ Guardia de grupo inválido (fix TecDeA r4): nunca renderizar una
-    // cuadrícula vacía por un grupo null/undefined/desconocido (p. ej. un
-    // doble envío del formulario de contraseña). Volver a la portada.
-    if (!group || !GROUP_KEYS.includes(group)) {
-      console.warn("[Portal IES] showGroup con grupo inválido:", group, "→ volviendo a la portada. — fix TecDeA r4");
-      renderHome();
-      return;
-    }
-    _currentGroup = group;   // recordar el grupo mostrado (fix TecDeA)
-    const grid     = document.getElementById("appGrid");
-
-    // Carga inicial aún en curso: pantalla de carga en lugar del mensaje
-    // engañoso «no hay aplicaciones». Al terminar la carga, loadData vuelve a
-    // llamar a showGroup con los datos reales. — fix TecDeA
-    if (!_appsLoaded) {
-      grid.innerHTML = "<p class='empty'>⏳ Cargando aplicaciones…</p>";
-      document.getElementById("groupTitle").textContent = groupLabel(group);
-      setView("group");
-      document.querySelector('.btn-config')?.classList.remove('hidden');
-      return;
-    }
-
-    // Lectura inicial de Firebase FALLIDA (red, reglas…): mensaje honesto.
-    // Antes se mostraba «No hay aplicaciones configuradas para este grupo»,
-    // lo que confundía al administrador pensando que había perdido los datos.
-    // — fix TecDeA
-    if (_appsLoadFailed) {
-      grid.innerHTML = "<p class='empty'>⚠ No se pudieron cargar las aplicaciones desde Firebase.<br><small>Comprueba tu conexión a internet. Los datos NO se han borrado: siguen intactos en la base de datos.</small><br><button id='btnRetryLoad' class='main-btn' style='margin-top:.9rem;'>↻ Reintentar la carga</button><br><small style='opacity:.6'>Portal " + PORTAL_VERSION + "</small></p>";
-      document.getElementById("btnRetryLoad")?.addEventListener("click", () => {
-        // Reintento manual: reactiva el estado de carga y relanza loadData.
-        // Al terminar, loadData volverá a pintar este perfil con los datos
-        // (o con el mensaje de fallo si sigue sin haber conexión). — fix TecDeA
-        _appsLoadFailed = false;
-        _appsLoaded = false;
-        document.getElementById("appGrid").innerHTML = "<p class='empty'>⏳ Cargando aplicaciones…</p>";
-        loadData();
-      });
-      document.getElementById("groupTitle").textContent = groupLabel(group);
-      setView("group");
-      document.querySelector('.btn-config')?.classList.remove('hidden');
-      return;
-    }
-
     // Solo apps ACTIVAS: las desactivadas por el administrador no se muestran
     // en el perfil (isAppActive: apps sin la propiedad «active» = activas)
     let filtered = apps.filter(a => a[group] && isAppActive(a));
-    // Nº de apps del perfil que existen pero están desactivadas (Act. sin marcar)
-    const hiddenInactive = apps.filter(a => a[group] && !isAppActive(a)).length;
     // Ordenar alfabéticamente por nombre (case-insensitive, español)
     filtered.sort((a, b) => {
       const va = (a.name || "").toString().toLowerCase().trim();
       const vb = (b.name || "").toString().toLowerCase().trim();
       return va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' });
     });
-    if (filtered.length) {
-      grid.innerHTML = filtered.map(a => appCard(a)).join("");
-    } else {
-      // Distinguir «perfil realmente vacío» de «perfil con todas sus apps
-      // desactivadas» — sin explicaciones visibles (petición del usuario).
-      grid.innerHTML = hiddenInactive
-        ? "<p class='empty'>No hay aplicaciones activas de este perfil.</p>"
-        : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
-    }
+    const grid     = document.getElementById("appGrid");
+    grid.innerHTML = filtered.length
+      ? filtered.map(a => appCard(a)).join("")
+      : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
 
     document.getElementById("groupTitle").textContent = groupLabel(group);
     setView("group");
+    // Asegurar que el botón Configuración sea visible en las vistas de grupo
+    document.querySelector('.btn-config')?.classList.remove('hidden');
     // Asegurar que el botón Configuración sea visible en las vistas de grupo
     document.querySelector('.btn-config')?.classList.remove('hidden');
 
@@ -986,11 +780,6 @@
     // Si ya cargó OK, no tocar
     if (img.complete && img.naturalWidth > 0) return;
 
-    // En file:// (prueba local con doble clic) TODOS estos fetch a terceros
-    // fallan por CORS (origen «null») y solo generan decenas de errores en
-    // la consola que confunden el diagnóstico real. Se omiten. — fix TecDeA
-    if (location.protocol === "file:") return;
-
     // Marcar como procesando para evitar llamadas duplicadas (mejora TecDeA)
     if (img.dataset.iconProcessing === 'true') return;
     img.dataset.iconProcessing = 'true';
@@ -1085,6 +874,7 @@
   function renderConfig() {
     // Resetear filtros al entrar en configuración (mejora portada de TecDeA)
     appsFilter = 'all';
+    appsStateFilter = 'all';
     document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
       btn.style.display = '';
       btn.classList.remove('active');
@@ -1130,10 +920,11 @@
     // Aplicar filtro por perfil (manteniendo el índice original en el array apps)
     const rowsData = [];
     apps.forEach((a, i) => {
-      // Filtro especial «_inactive»: listar solo las apps desactivadas
-      const matches = appsFilter === 'all'
-        || (appsFilter === '_inactive' ? a.active === false : !!a[appsFilter]);
-      if (matches) rowsData.push({ app: a, idx: i });
+      // Filtros COMBINABLES: perfil (profesorado/gestion/recursos/ia) + estado
+      // (activa/inactiva). Una app solo se lista si cumple AMBOS filtros.
+      const matchPerfil = matchPerfilApp(a, appsFilter);
+      const matchEstado = matchEstadoApp(a, appsStateFilter);
+      if (matchPerfil && matchEstado) rowsData.push({ app: a, idx: i });
     });
     // Aplicar ordenación (por defecto: alfabético por nombre)
     rowsData.sort((x, y) => {
@@ -1143,7 +934,7 @@
       return appsSort.direction === 'asc' ? cmp : -cmp;
     });
     const emptyRow = rowsData.length === 0
-      ? `<tr class="no-apps-row"><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con el filtro seleccionado.</td></tr>`
+      ? `<tr class="no-apps-row"><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem;font-style:italic;">No hay aplicaciones que coincidan con los filtros seleccionados.</td></tr>`
       : "";
     tbody.innerHTML = emptyRow + rowsData.map(({ app: a, idx: i }, visualIndex) => {
       const rowClass = visualIndex % 2 === 0 ? 'row-even' : 'row-odd';
@@ -1194,6 +985,9 @@
         // Guardar inmediatamente en Firebase al cambiar un checkbox de categoría
         // (autoguardado tolerante — mejora portada de TecDeA)
         if (inp.type === 'checkbox') {
+          // Los checkboxes (perfiles y «Act.») afectan a los contadores
+          // de la barra de filtros: refrescarlos al vuelo
+          updateFilterCounts();
           persistAppsChanges().then(notifyPersistResult);
         }
       });
@@ -1253,36 +1047,84 @@
     // Mantener sincronizada la lista de selección para exportar (mejora TecDeA)
     // (cubre: añadir/eliminar filas, guardar, filtrar y ordenar)
     buildExportAppSelection(true);
+
+    // Refrescar los contadores de la barra de filtros (nº de apps por botón)
+    updateFilterCounts();
   }
 
   // Cambia el filtro activo en la tabla de apps y refresca.
-   // Modo toggle: al pulsar un filtro, los demás desaparecen (display:none).
-  // Al volver a pulsar el mismo filtro activo, se restauran todos (filtro = 'all').
-  function setAppsFilter(filter) {
-    const allFilterBtns = Array.from(document.querySelectorAll('#appsFilterBar .filter-btn'));
+  // Hay dos grupos INDEPENDIENTES y combinables entre sí:
+  //  · Perfil: profesorado | gestion | recursos | ia   (variable appsFilter)
+  //  · Estado: _active | _inactive                     (variable appsStateFilter)
+  // Modo toggle POR GRUPO: al pulsar un filtro, los demás botones de SU GRUPO
+  // desaparecen (display:none); los del otro grupo siguen visibles para poder
+  // combinar (p. ej. «Profesorado» + «🚫 Inactivas»). Al volver a pulsar el
+  // mismo filtro activo, se restaura su grupo completo (variable = 'all').
+  function isStateFilter(f) {
+    return f === '_active' || f === '_inactive';
+  }
 
-    if (appsFilter === filter) {
-      // TOGGLE OFF: desactivar, mostrar todo
-      appsFilter = 'all';
-      allFilterBtns.forEach(btn => {
+  function refreshAppsFilterBar() {
+    document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
+      const f = btn.dataset.filter || '';
+      const groupVal = isStateFilter(f) ? appsStateFilter : appsFilter;
+      if (groupVal === 'all') {
+        // Grupo sin filtro: todos sus botones visibles, ninguno activo
         btn.style.display = '';
         btn.classList.remove('active');
-      });
-    } else {
-      // TOGGLE ON: activar filtro, ocultar los demás
-      appsFilter = filter;
-      allFilterBtns.forEach(btn => {
-        if (btn.dataset.filter === filter) {
-          btn.style.display = '';
-          btn.classList.add('active');
-        } else {
-          btn.style.display = 'none';
-          btn.classList.remove('active');
-        }
-      });
-    }
+      } else if (f === groupVal) {
+        btn.style.display = '';
+        btn.classList.add('active');
+      } else {
+        // Otro botón del mismo grupo con un filtro activo: ocultar
+        btn.style.display = 'none';
+        btn.classList.remove('active');
+      }
+    });
+  }
 
+  function setAppsFilter(filter) {
+    if (isStateFilter(filter)) {
+      appsStateFilter = (appsStateFilter === filter) ? 'all' : filter;
+    } else {
+      appsFilter = (appsFilter === filter) ? 'all' : filter;
+    }
+    refreshAppsFilterBar();
     buildConfigTable();
+  }
+
+  // ¿La app «a» pasa el filtro de PERFIL f? (f: 'all' | clave de grupo)
+  function matchPerfilApp(a, f) {
+    return f === 'all' || !!a[f];
+  }
+
+  // ¿La app «a» pasa el filtro de ESTADO f? (f: 'all' | '_active' | '_inactive')
+  function matchEstadoApp(a, f) {
+    return f === 'all' || (f === '_active' ? isAppActive(a) : a.active === false);
+  }
+
+  // Contadores de cada botón de la barra de filtros: cuántas apps mostraría
+  // el botón al pulsarlo. Son CONTEXTUALES: el contador de cada grupo se
+  // calcula combinado con el filtro activo del OTRO grupo (p. ej., con
+  // «Profesorado» activo, «✅ Activas» / «🚫 Inactivas» muestran cuántas
+  // activas/inactivas hay DE ESE perfil). Sin filtros, muestran los totales.
+  function updateFilterCounts() {
+    const counts = {};
+    GROUP_KEYS.forEach(k => { counts[k] = 0; });
+    counts._active = 0;
+    counts._inactive = 0;
+    apps.forEach(a => {
+      const pasaEstado = matchEstadoApp(a, appsStateFilter); // límite de los contadores de PERFIL
+      const pasaPerfil = matchPerfilApp(a, appsFilter);      // límite de los contadores de ESTADO
+      GROUP_KEYS.forEach(k => { if (a[k] && pasaEstado) counts[k]++; });
+      if (pasaPerfil) {
+        if (isAppActive(a)) counts._active++; else counts._inactive++;
+      }
+    });
+    document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
+      const c = btn.querySelector('.filter-count');
+      if (c) c.textContent = counts[btn.dataset.filter] ?? 0;
+    });
   }
 
   function collectTableData() {
@@ -1419,11 +1261,6 @@
   // Resultado de un intento de guardado → toast adecuado
   function notifyPersistResult(res) {
     if (!res) return;
-    if (res.blocked) {
-      // Guardado bloqueado por carga inicial en curso (anti-pérdida). — fix TecDeA
-      showToast("⏳ Los datos aún se están cargando. Espera a que finalice la carga antes de editar.", "err", 5000);
-      return;
-    }
     if (!res.ok) { showToast("Error al guardar en Firebase.", "err", 4000); return; }
     if (res.uncategorized && res.uncategorized.length > 0) showUncategorizedToast(res.uncategorized, res.saved);
     else if (res.saved) showToast("✓ Guardado", "ok", 1000);
@@ -1433,12 +1270,6 @@
   // de casillas. Persiste lo que pueda sin dar de alta filas nuevas incompletas
   // y sin bloquearse por las apps sin categorizar.
   async function persistAppsChanges() {
-    // ⛔ Protección anti-pérdida: no escribir NUNCA si la carga inicial no ha
-    // terminado (Firebase lento/caído). — fix TecDeA
-    if (!_appsLoaded) {
-      console.warn("[Portal IES] Autoguardado bloqueado: los datos aún no se han cargado de Firebase.");
-      return { ok: false, blocked: true, saved: false, uncategorized: [] };
-    }
     const json = JSON.stringify(apps);
     const uncategorized = getUncategorizedApps();
     const payload = autoSavePayload(apps, isAppResident);
@@ -1647,6 +1478,7 @@
   // Deja la barra de filtros en «Todas» (misma secuencia que el antiguo addAppRow)
   function resetAppsFilterUI() {
     appsFilter = 'all';
+    appsStateFilter = 'all';
     document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
       btn.style.display = '';
       btn.classList.remove('active');
@@ -1819,12 +1651,6 @@
   }
 
   async function saveConfig() {
-    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
-    // — fix TecDeA
-    if (!_appsLoaded) {
-      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
-      return;
-    }
     collectTableData();
     // Validación obligatoria: cada app con nombre debe tener al menos una categoría
     const uncategorized = getUncategorizedApps();
@@ -1932,12 +1758,6 @@
   };
 
   async function saveAdminsConfig() {
-    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
-    // — fix TecDeA
-    if (!_appsLoaded) {
-      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
-      return;
-    }
     collectAdminsData();
     const cleaned = admins.filter(a => a.user && a.pass);
     if (cleaned.length === 0) {
@@ -1977,12 +1797,6 @@
   }
 
   async function saveGroupPasswordsConfig() {
-    // ⛔ Protección anti-pérdida: no guardar hasta que la carga inicial termine.
-    // — fix TecDeA
-    if (!_appsLoaded) {
-      showToast("⏳ Los datos aún no se han cargado de Firebase. Espera unos segundos.", "err", 5000);
-      return;
-    }
     groupPasswords = {
       profesorado: document.getElementById("passProfesorado").value,
       gestion:     document.getElementById("passGestion").value,
@@ -3141,31 +2955,6 @@
   // ── Arranque ──────────────────────────────────────────
   loadData();
 
-  // ── Perro guardián de la carga inicial (fix TecDeA) ────
-  // Red de seguridad absoluta: si en 15 s la carga inicial NO ha terminado
-  // (SDK colgado Y plan B REST abortado a la vez, p. ej. red que engulle
-  // los paquetes), se marca el fallo explícitamente y se muestra el
-  // mensaje con botón «↻ Reintentar la carga». Nadie se queda ya colgado
-  // en «Cargando aplicaciones…» de forma indefinida.
-  setTimeout(() => {
-    if (_appsLoaded) return;
-    console.warn("[Portal IES] Watchdog: la carga inicial no terminó en 15 s. Mostrando estado de fallo con reintento.");
-    _appsLoadFailed = true;
-    _appsLoaded = true;
-    try {
-      const groupView = document.getElementById("view-group");
-      if (_currentGroup && groupView && !groupView.classList.contains("hidden")) {
-        showGroup(_currentGroup);            // refrescar la vista abierta con el error
-      } else if (_pendingOpenGroup) {
-        const g = _pendingOpenGroup;
-        _pendingOpenGroup = null;
-        requestGroupAccess(g);               // continuar el flujo pulsado (pedirá contraseña)
-      }
-    } catch (wdErr) {
-      console.warn("[Portal IES] Watchdog: error al refrescar la vista:", wdErr);
-    }
-  }, 15000);
-
   // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
   ['passProfesorado', 'passGestion', 'passRecursos', 'passIa'].forEach(id => {
     const inp = document.getElementById(id);
@@ -4006,6 +3795,11 @@
     letter-spacing: .02em;
     flex-shrink: 0;
   }
+  .filter-label-state {
+    margin-left: .35rem;
+    padding-left: .65rem;
+    border-left: 1px solid #d1d5db;
+  }
   .filter-btn {
     background: #fff;
     border: 1.5px solid #d1d5db;
@@ -4040,6 +3834,27 @@
     color: var(--navy);
     border-color: var(--gold);
     box-shadow: 0 4px 14px rgba(200,168,75,.4);
+  }
+  /* Contador de apps por botón de filtro (badge pequeño) */
+  .filter-count {
+    background: rgba(11,37,69,.09);
+    color: var(--navy);
+    border-radius: 10px;
+    font-size: .68rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: .24rem .48rem;
+    min-width: 1.6em;
+    text-align: center;
+    margin-left: .15rem;
+  }
+  .filter-btn.active .filter-count {
+    background: rgba(255,255,255,.28);
+    color: #fff;
+  }
+  .filter-btn.active:hover .filter-count {
+    background: rgba(11,37,69,.15);
+    color: var(--navy);
   }
 
   /* ══ Sección Exportar ═════════════════════════════════ */
@@ -4837,7 +4652,6 @@
         <span class="btn-icon">🤖</span>IA
       </button>
     </div>
-
   </section>
 
   <!-- Vista: GRUPO -->
@@ -4868,15 +4682,17 @@
           Las nuevas aplicaciones se dan de alta con el botón «＋ Añadir aplicación», que abre un modal de confirmación.
           Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
           Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
-          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra) y el filtro «🚫 Desactivadas» las lista todas para volver a activarlas.
+          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra). Los filtros son <strong>combinables</strong>: p. ej. «👨‍🏫 Profesorado» + «🚫 Inactivas» muestra solo las apps de ese perfil que estén desactivadas, para revisarlas o volver a activarlas.
         </p>
         <div class="filter-bar" id="appsFilterBar">
-          <span class="filter-label">🔎 Filtrar por perfil:</span>
-          <button class="filter-btn" data-filter="profesorado" onclick="ies.setAppsFilter('profesorado')">👨‍🏫 Profesorado</button>
-          <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión</button>
-          <button class="filter-btn" data-filter="recursos" onclick="ies.setAppsFilter('recursos')">📚 Recursos</button>
-          <button class="filter-btn" data-filter="ia" onclick="ies.setAppsFilter('ia')">🤖 IA</button>
-          <button class="filter-btn" data-filter="_inactive" onclick="ies.setAppsFilter('_inactive')" title="Mostrar solo las aplicaciones desactivadas (ocultas en el perfil)">🚫 Desactivadas</button>
+          <span class="filter-label">🔎 Perfil:</span>
+          <button class="filter-btn" data-filter="profesorado" onclick="ies.setAppsFilter('profesorado')">👨‍🏫 Profesorado<span class="filter-count"></span></button>
+          <button class="filter-btn" data-filter="gestion" onclick="ies.setAppsFilter('gestion')">🗂️ Gestión<span class="filter-count"></span></button>
+          <button class="filter-btn" data-filter="recursos" onclick="ies.setAppsFilter('recursos')">📚 Recursos<span class="filter-count"></span></button>
+          <button class="filter-btn" data-filter="ia" onclick="ies.setAppsFilter('ia')">🤖 IA<span class="filter-count"></span></button>
+          <span class="filter-label filter-label-state">Estado:</span>
+          <button class="filter-btn" data-filter="_active" onclick="ies.setAppsFilter('_active')" title="Mostrar solo las aplicaciones activas (visibles en su perfil)">✅ Activas<span class="filter-count"></span></button>
+          <button class="filter-btn" data-filter="_inactive" onclick="ies.setAppsFilter('_inactive')" title="Mostrar solo las aplicaciones inactivas (ocultas en su perfil)">🚫 Inactivas<span class="filter-count"></span></button>
         </div>
         <div class="actions">
           <button class="btn btn-gold" onclick="ies.showAddAppModal()">＋ Añadir aplicación</button>
@@ -5069,14 +4885,13 @@
 <div id="loginModal" class="modal-bg hidden">
   <div class="modal">
     <h2>🔐 Acceso a Configuración</h2>
-    <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="off">
+    <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="on">
       <div class="fi-label">Usuario</div>
-      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="off"
+      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="username"
              onkeydown="if(event.key==='Enter') document.getElementById('loginPass').focus()">
       <div class="fi-label" style="margin-top:.5rem">Contraseña</div>
-      <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="new-password">
-      <!-- fix TecDeA r4: mismo ajuste que groupPassInput — el onsubmit del
-           <form> ya cubre Enter; el onkeydown duplicaba el envío. -->
+      <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') ies.doLogin()">
       <div id="loginError" class="modal-error"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeLoginModal()">Cancelar</button>
@@ -5090,18 +4905,11 @@
 <div id="groupPassModal" class="modal-bg hidden">
   <div class="modal">
     <h2 id="groupPassTitle">Acceso</h2>
-    <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="off">
-      <input type="text" name="username" autocomplete="off" style="display:none" tabindex="-1" aria-hidden="true">
+    <form onsubmit="event.preventDefault(); ies.doGroupLogin()" autocomplete="on">
+      <input type="text" name="username" autocomplete="username" style="display:none" tabindex="-1" aria-hidden="true">
       <div class="fi-label">Contraseña</div>
-      <!-- fix TecDeA r5: autocomplete new-password evita que Chrome rellene
-           SOLAMENTE una clave antigua guardada (p. ej. tras cambiar la clave
-           del perfil, el autofill metía la vieja y producía «contraseña
-           incorrecta» aparentemente aleatorio). -->
-      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="new-password">
-      <!-- fix TecDeA r4: el onkeydown Enter se ELIMINA — el onsubmit del
-           <form> ya gestiona Enter. Antes se ejecutaba doGroupLogin DOS veces
-           (keydown + submit) y la 2ª, con pendingGroup ya a null, vaciaba la
-           cuadrícula recién renderizada. -->
+      <input type="password" id="groupPassInput" class="fi" placeholder="••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') ies.doGroupLogin()">
       <div id="groupPassError" class="modal-error"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeGroupPassModal()">Cancelar</button>
@@ -5208,26 +5016,22 @@
     // Sólo registrar en producción (https o localhost)
     if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
-    navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' })
+    navigator.serviceWorker.register('sw.js', { scope: './' })
       .then((reg) => {
         console.log('[PWA] Service Worker registrado con scope:', reg.scope);
 
-        // Si al registrar ya había una versión esperando, activarla YA.
-        // (fix TecDeA: antes el usuario podía quedarse días en la versión
-        //  antigua hasta que le diera la gana recargar dos veces.)
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-
-        // Detectar actualizaciones del SW: activarlas automáticamente y
-        // recargar una sola vez para servir siempre la última versión.
+        // Detectar actualizaciones del SW y avisar al usuario
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('[PWA] Nueva versión detectada: activando y recargando…');
-              newWorker.postMessage({ type: 'SKIP_WAITING' });
+              // Hay una nueva versión disponible
+              console.log('[PWA] Nueva versión disponible. Recarga para aplicar.');
+              if (window.ies && typeof window.ies.showToast === 'function') {
+                // No existe todavía showToast en window.ies, pero por si acaso
+              }
+              // Mostrar aviso sutil en consola; el usuario puede recargar
             }
           });
         });
@@ -5236,13 +5040,13 @@
         console.warn('[PWA] Error al registrar el Service Worker:', err);
       });
 
-    // Cuando el nuevo SW toma el control, recargar UNA vez para que la
-    // página se sirva ya con la versión nueva (el flag evita bucles).
+    // Si el SW ha tomado el control y hay una nueva versión, recargar una vez
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // Evitar bucle de recarga con un flag
         if (!window._swReloaded) {
           window._swReloaded = true;
-          location.reload();
+          // location.reload();
         }
       });
     }
