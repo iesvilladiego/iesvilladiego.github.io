@@ -1507,6 +1507,9 @@
     ["addAppProfesorado", "addAppGestion", "addAppRecursos", "addAppIa"].forEach(id => {
       document.getElementById(id).checked = false;
     });
+    // Por defecto, la nueva app se crea ACTIVA (la casilla se puede desmarcar)
+    document.getElementById("addAppActive").checked = true;
+    document.getElementById("addAppActiveNote").classList.add("hidden");
     document.getElementById("addAppNameWarn").classList.add("hidden");
     const nameInp = document.getElementById("addAppName");
     nameInp.style.borderColor = "";
@@ -1523,6 +1526,10 @@
 
   function addAppFormChanged() {
     setAddAppError("");
+    // Sincronizar la nota de «alta desactivada» con la casilla «Aplicación activa»
+    const activeCb = document.getElementById("addAppActive");
+    const actNote = document.getElementById("addAppActiveNote");
+    if (activeCb && actNote) actNote.classList.toggle("hidden", activeCb.checked);
   }
 
   // Aviso en vivo de nombres duplicados/similares mientras se escribe
@@ -1577,6 +1584,7 @@
     const ges  = !!document.getElementById("addAppGestion").checked;
     const rec  = !!document.getElementById("addAppRecursos").checked;
     const ia   = !!document.getElementById("addAppIa").checked;
+    const activa = !!document.getElementById("addAppActive").checked;
 
     setAddAppError("");
     if (!name) {
@@ -1599,7 +1607,7 @@
     // Detección de duplicados/similares (aviso, no bloqueo — igual que en la tabla)
     const similar = findSimilarApps(name, -1, 0.75);
 
-    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: true });
+    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa });
 
     // Mostrar la nueva app: reset de filtros (comportamiento del antiguo addAppRow)
     resetAppsFilterUI();
@@ -1607,6 +1615,7 @@
     closeAddAppModal();
 
     let msg = `✓ Aplicación «${name}» añadida`;
+    if (!activa) msg += " 🚫 (desactivada: oculta en su perfil)";
     if (similar.length > 0) {
       const exact = similar.find(s => s.isExact);
       msg += exact
@@ -4137,6 +4146,39 @@
     cursor: pointer;
     flex-shrink: 0;
   }
+  /* Casilla «Aplicación activa» del modal de nueva aplicación */
+  .addapp-active-row label {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .85rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .addapp-active-row input[type=checkbox] {
+    width: 17px; height: 17px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .addapp-active-sub {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: .78rem;
+  }
+  /* Aviso al desmarcar «Aplicación activa»: se creará desactivada */
+  .addapp-inact-note {
+    font-size: .78rem;
+    color: #7a2828;
+    background: #fdecec;
+    border: 1px solid #e0a1a1;
+    border-radius: 7px;
+    padding: .45rem .6rem;
+    margin: .5rem 0 .2rem;
+    line-height: 1.45;
+  }
   @media (max-width: 480px) {
     .addapp-profiles { grid-template-columns: 1fr; }
   }
@@ -4968,6 +5010,12 @@
         <label><input type="checkbox" id="addAppRecursos" onchange="ies.addAppFormChanged()"> 📚 Recursos</label>
         <label><input type="checkbox" id="addAppIa" onchange="ies.addAppFormChanged()"> 🤖 IA</label>
       </div>
+
+      <div class="fi-label">Estado</div>
+      <div class="addapp-active-row">
+        <label><input type="checkbox" id="addAppActive" onchange="ies.addAppFormChanged()" checked> ✅ Aplicación activa <span class="addapp-active-sub">(desmárcala para crearla oculta en el perfil)</span></label>
+      </div>
+      <div id="addAppActiveNote" class="addapp-inact-note hidden">🚫 La app se dará de alta <strong>desactivada</strong>: quedará oculta en su perfil hasta que la actives con la casilla «Act.» de la tabla de Configuración.</div>
 
       <div id="addAppError" class="modal-error"></div>
       <div class="modal-actions">
