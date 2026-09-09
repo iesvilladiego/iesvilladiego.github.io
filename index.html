@@ -3150,7 +3150,7 @@
     max-width: 960px;
     margin: 0 auto;
     padding: 1.5rem 1rem 3rem;
-    /* Hueco inferior amplio: deja sitio al botón Volver flotante (FAB) */
+    /* Hueco inferior amplio: respiro visual al final del contenido */
     padding-bottom: calc(5rem + var(--safe-bottom));
     width: 100%;
   }
@@ -3246,16 +3246,19 @@
   /* ══ Group view ═════════════════════════════════════ */
   #view-group {}
 
-  /* ══ Botón Volver - FAB flotante abajo-derecha ═══ */
+  /* ══ Botón Volver - FAB flotante a media altura, lado derecho ═══ */
 
-  /* Estilos base comunes: fijo en la esquina inferior derecha de la
-     pantalla, siempre visible (flotante) aunque se haga scroll, de modo
-     que queda SIEMPRE por debajo de la matriz de aplicaciones. */
+  /* Estilos base comunes: fijo en el lateral derecho de la pantalla,
+     centrado verticalmente (siempre a la mitad), visible (flotante)
+     aunque se haga scroll. */
   .back-btn {
     display: inline-flex; align-items: center; gap: .4rem;
     position: fixed;
     right: calc(1rem + var(--safe-right));
-    bottom: calc(1.5rem + var(--safe-bottom));
+    top: 50%;
+    /* Centrado vertical. OJO: :hover y la animación backBtnSlideIn
+       deben conservar este translateY(-50%) (ver keyframes). */
+    transform: translateY(-50%);
     z-index: 500; /* sobre el contenido; bajo modales (999) y toasts (9999) */
     background: var(--navy);
     color: var(--white);
@@ -3292,10 +3295,11 @@
     transform: rotate(-180deg);
   }
 
-  /* Entrada deslizante desde el borde derecho */
+  /* Entrada deslizante desde el borde derecho (conservando el
+     centrado vertical translateY(-50%)) */
   @keyframes backBtnSlideIn {
-    from { opacity: 0; transform: translateX(24px); }
-    to   { opacity: 0.95; transform: translateX(0); }
+    from { opacity: 0; transform: translateY(-50%) translateX(24px); }
+    to   { opacity: 0.95; transform: translateY(-50%) translateX(0); }
   }
 
   /* Cuando el botón Volver está activo/visible, asegurar máxima visibilidad */
@@ -3304,7 +3308,7 @@
     opacity: 1;
   }
 
-  /* ═══ Pantallas GRANDES (≥768px): FAB abajo-derecha con sombra realzada ═══ */
+  /* ═══ Pantallas GRANDES (≥768px): FAB lateral derecho con sombra realzada ═══ */
   @media (min-width: 768px) {
     .back-btn {
       box-shadow:
@@ -3314,7 +3318,7 @@
     }
 
     .back-btn:hover {
-      transform: translateY(-2px) scale(1.05);
+      transform: translateY(calc(-50% - 2px)) scale(1.05);
       box-shadow:
         0 0 0 1px rgba(200,168,75,.6),
         0 8px 32px rgba(200,168,75,.4),
@@ -3327,11 +3331,9 @@
     }
   }
 
-  /* ═══ Pantallas PEQUEÑAS (<768px): FAB flotante, elevado sobre la zona del toast ═══ */
+  /* ═══ Pantallas PEQUEÑAS (<768px): FAB flotante a media altura ═══ */
   @media (max-width: 767px) {
     .back-btn {
-      /* Elevado para no solaparse con los avisos (toast) inferiores */
-      bottom: calc(5rem + var(--safe-bottom));
       right: calc(.9rem + var(--safe-right));
       min-height: 46px;
       font-size: .92rem;
@@ -3339,7 +3341,7 @@
     }
 
     .back-btn:hover {
-      transform: translateY(-2px) scale(1.02);
+      transform: translateY(calc(-50% - 2px)) scale(1.02);
     }
 
     .config-header {
@@ -4721,8 +4723,8 @@
   <section id="view-group" class="hidden">
     <h2 class="group-heading" id="groupTitle"></h2>
     <div class="app-grid" id="appGrid"></div>
-    <!-- Botón Volver flotante (FAB): fijo abajo-derecha, siempre accesible
-         bajo la matriz de apps sin depender del scroll -->
+    <!-- Botón Volver flotante (FAB): fijo en el lateral derecho, centrado
+         verticalmente (siempre a la mitad), accesible sin depender del scroll -->
     <button class="back-btn" onclick="ies.renderHome()">Volver</button>
   </section>
 
