@@ -359,6 +359,13 @@
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
   function requestGroupAccess(group) {
     const expected = groupPasswords[group];
+    // Memoria de sesión: si esta contraseña ya se validó antes en esta
+    // sesión, no volver a pedírsela al usuario (hasta que se reinicie la
+    // app o se cambie de sesión con pulsación larga en ⚙)
+    if (unlockedInSession.has(group)) {
+      showGroup(group);
+      return;
+    }
     // Si no hay contraseña configurada para este perfil → acceso directo, sin modal
     if (!expected) {
       console.warn(`Perfil "${group}" sin contraseña configurada. Acceso libre.`);
@@ -401,6 +408,7 @@
       showGroup(g);
     } else if (input === expected) {
       closeGroupPassModal();
+      unlockedInSession.add(g);   // Memoria de sesión: no volver a pedirla
       showGroup(g);
     } else {
       document.getElementById("groupPassError").textContent = "Contraseña incorrecta.";
@@ -408,6 +416,82 @@
       inp.value = "";
       inp.focus();
     }
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  SESIÓN: memoria de contraseñas + cambio de sesión manual
+  // ═══════════════════════════════════════════════════════
+
+  // Contraseñas ya validadas en ESTA sesión (solo en memoria: al recargar
+  // o reiniciar la app se olvida todo y se vuelven a pedir). Claves:
+  // 'admin' y las de grupo ('profesorado', 'gestion', 'recursos', 'ia').
+  const unlockedInSession = new Set();
+
+  // ── Pulsación larga en ⚙ Configuración = cambio de sesión ──────
+  // Mantener pulsado ≈0,9 s vuelve a bloquear todos los accesos (admin
+  // y perfiles) SIN recargar la aplicación, y regresa al Home.
+  const LONGPRESS_LOCK_MS = 900;
+  let _lpTimer = null;
+  let _lockFiredAt = 0;   // instante del último bloqueo (suprime el click residual)
+
+  function lockSession() {
+    unlockedInSession.clear();          // ← todo vuelve a pedir contraseña
+    closeTutorial();                    // el tutorial se pliega también
+    closeGroupPassModal();              // cierra modales de acceso si quedaran abiertos
+    closeLoginModal();
+    renderHome();                       // de vuelta al inicio (todo bloqueado)
+    showToast("🔒 Sesión reiniciada: las contraseñas volverán a pedirse al entrar.", "", 3500);
+  }
+
+  function initSessionLock() {
+    const btn = document.querySelector(".btn-config");
+    if (!btn) return;
+    const cancelHold = () => {
+      if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+      btn.classList.remove("holding");
+    };
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button && e.button !== 0) return;   // solo botón principal
+      cancelHold();
+      _lpTimer = setTimeout(() => {
+        _lpTimer = null;
+        btn.classList.remove("holding");
+        _lockFiredAt = Date.now();              // el click del pointerup se suprime abajo
+        lockSession();
+      }, LONGPRESS_LOCK_MS);
+      btn.classList.add("holding");
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev =>
+      btn.addEventListener(ev, cancelHold));
+    // En táctil, la pulsación mantenida no debe abrir menú contextual
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Supresor del click residual: tras dispararse la pulsación larga, el
+    // pointerup genera un click que llegaría al onclick (abriría el acceso
+    // a Configuración justo después de bloquear). Se mata en fase captura
+    // durante una ventana corta de 500 ms.
+    document.addEventListener("click", (e) => {
+      // Solo el click residual SOBRE el propio botón ⚙ (el que genera su
+      // pointerup); los clicks en otros elementos nunca se suprimen
+      if (Date.now() - _lockFiredAt < 500 && e.target.closest(".btn-config")) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+  }
+
+  // ── Tutorial desplegable del banner superior (pantalla Home) ──
+  let tutorialOpen = false;
+
+  function toggleTutorial() {
+    tutorialOpen = !tutorialOpen;
+    const panel = document.getElementById("tutorialPanel");
+    const btn   = document.getElementById("btnTutorial");
+    if (panel) panel.classList.toggle("hidden", !tutorialOpen);
+    if (btn)   btn.setAttribute("aria-expanded", String(tutorialOpen));
+  }
+
+  function closeTutorial() {
+    if (tutorialOpen) toggleTutorial();
   }
 
   function showGroup(group) {
@@ -851,6 +935,13 @@
       return; // Ya estamos en configuración, no mostrar modal
     }
 
+    // Memoria de sesión: si la contraseña de administrador ya se validó
+    // en esta sesión, entrar directamente en Configuración sin pedirla
+    if (unlockedInSession.has("admin")) {
+      renderConfig();
+      return;
+    }
+
     document.getElementById("loginError").textContent = "";
     document.getElementById("loginUser").value = "";
     document.getElementById("loginPass").value = "";
@@ -877,6 +968,7 @@
     const found = admins.find(a => a.user === u && a.pass === p);
     if (found) {
       closeLoginModal();
+      unlockedInSession.add("admin");   // Memoria de sesión: no volver a pedirla
       renderConfig();
     } else {
       document.getElementById("loginError").textContent = "Usuario o contraseña incorrectos.";
@@ -2785,6 +2877,10 @@
   function setView(id) {
     ["home","group","config"].forEach(v =>
       document.getElementById("view-" + v).classList.toggle("hidden", v !== id));
+    // Vista activa en <body>: el botón «Tutorial» del banner solo se muestra
+    // en Home y, al salir de Home, el tutorial se pliega automáticamente
+    document.body.dataset.view = id;
+    if (id !== "home") closeTutorial();
     // Limpiar modal de descripción al cambiar de vista (evita que quede flotando)
     const descModal = document.getElementById("descModal");
     if (descModal && !descModal.classList.contains("hidden")) {
@@ -3073,6 +3169,8 @@
     sortApps, setAppsFilter,
     exportData,
     toggleAccordion,
+    // Tutorial desplegable del banner superior (pantalla Home)
+    toggleTutorial,
     // Detección de duplicados
     findSimilarApps,
     validateAppName,
@@ -3086,6 +3184,8 @@
 
   // ── Arranque ──────────────────────────────────────────
   loadData();
+  // Listeners de pulsación larga en ⚙ Configuración (cambio de sesión)
+  initSessionLock();
 
   // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
   ['passProfesorado', 'passGestion', 'passRecursos', 'passIa'].forEach(id => {
@@ -3246,6 +3346,99 @@
   }
   .btn-about:hover  { background: var(--gold); transform: scale(1.05); }
   .btn-about:active { background: var(--gold); transform: scale(.94); }
+
+  /* Botón ❓ Tutorial del banner superior (solo pantalla Home) */
+  .btn-tutorial {
+    background: transparent;
+    border: 1.5px solid var(--gold);
+    color: var(--gold2);
+    padding: .45rem .85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    transition: background .2s, color .2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 40px;
+    display: inline-flex; align-items: center;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  .btn-tutorial:hover  { background: var(--gold); color: var(--navy); }
+  .btn-tutorial:active { background: var(--gold); color: var(--navy); transform: scale(.96); }
+  /* Fuera del Home, el botón Tutorial se oculta (el tutorial pertenece
+     a la pantalla de inicio; body[data-view] lo marca setView) */
+  body[data-view]:not([data-view="home"]) .btn-tutorial { display: none; }
+
+  /* Feedback visual mientras se mantiene pulsado ⚙ (cambio de sesión):
+     el pulso dura lo mismo que la espera (0,9 s) */
+  .btn-config.holding { animation: lpPulse .9s ease forwards; }
+  @keyframes lpPulse {
+    0%   { background: transparent; color: var(--gold2); }
+    60%  { background: rgba(200, 168, 75, .35); }
+    100% { background: var(--gold); color: var(--navy); }
+  }
+
+  /* ── Panel del tutorial desplegable (bajo el banner superior) ── */
+  .tutorial-panel {
+    background: var(--white);
+    border-bottom: 3px solid var(--gold);
+    box-shadow: 0 6px 20px rgba(11, 37, 69, .18);
+    animation: tutorialSlide .3s ease;
+  }
+  .tutorial-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1.1rem 1rem 1.3rem;
+  }
+  .tutorial-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .6rem;
+    gap: .75rem;
+  }
+  .tutorial-title { font-weight: 700; color: var(--navy); font-size: 1rem; }
+  .tutorial-close {
+    background: transparent;
+    border: 1.5px solid var(--gold);
+    color: var(--navy);
+    width: 32px; height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: .85rem;
+    line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .2s;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tutorial-close:hover { background: var(--gold); }
+  .tutorial-steps {
+    margin-left: 1.2rem;
+    display: grid;
+    gap: .45rem;
+    color: var(--text);
+    font-size: .92rem;
+    line-height: 1.45;
+    text-align: left;
+  }
+  .tutorial-steps strong { color: var(--navy); }
+  @keyframes tutorialSlide {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Móvil estrecho: Tutorial queda como botón solo-icono */
+  @media (max-width: 560px) {
+    .btn-tutorial { padding: .45rem .55rem; }
+    .btn-tutorial-text { display: none; }
+    .tutorial-steps { font-size: .85rem; }
+  }
 
   /* ══ Main wrapper ═══════════════════════════════════ */
   main {
@@ -4704,7 +4897,7 @@
   /* ── Impresión ══════════════════════════════════════ */
   @media print {
     body { background: white; color: black; }
-    header, .btn-config, .toast, .modal-bg { display: none !important; }
+    header, .btn-config, .btn-tutorial, .tutorial-panel, .toast, .modal-bg { display: none !important; }
     .app-grid { grid-template-columns: repeat(4, 1fr); }
     .app-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
     .back-btn { display: none !important; }
@@ -4790,9 +4983,32 @@
     <button class="btn-about" type="button" aria-label="Información sobre esta aplicación"
             title="Información sobre esta app (Vibe Coding · reportar errores)"
             onclick="ies.showAboutModal()">⚠️</button>
-    <button class="btn-config" onclick="ies.showLoginModal()">⚙ Configuración</button>
+    <button id="btnTutorial" class="btn-tutorial" type="button" aria-expanded="false" aria-controls="tutorialPanel"
+            title="Tutorial: cómo usar el portal"
+            onclick="ies.toggleTutorial()">❓<span class="btn-tutorial-text">&nbsp;Tutorial</span></button>
+    <button class="btn-config" type="button"
+            title="Clic: acceso a Configuración · Mantener pulsado ≈1 s: cambiar de sesión (bloquear todo)"
+            onclick="ies.showLoginModal()">⚙ Configuración</button>
   </div>
 </header>
+
+<!-- ═════════════ TUTORIAL DESPLEGABLE (bajo el banner superior, Home) ══ -->
+<div id="tutorialPanel" class="tutorial-panel hidden" role="region" aria-label="Tutorial: cómo usar el portal">
+  <div class="tutorial-inner">
+    <div class="tutorial-head">
+      <span class="tutorial-title">📖 Cómo usar el Portal de aplicaciones</span>
+      <button type="button" class="tutorial-close" aria-label="Cerrar tutorial" onclick="ies.toggleTutorial()">✕</button>
+    </div>
+    <ol class="tutorial-steps">
+      <li><strong>Elige tu perfil</strong> en la pantalla de inicio: 👨‍🏫 Profesorado, 🗂️ Gestión, 📚 Recursos o 🤖 IA.</li>
+      <li>Si el perfil tiene contraseña, te la pedirá <strong>una sola vez</strong>: no volverá a pedírtela <strong>hasta que se reinicie la app</strong>.</li>
+      <li>Pulsa la <strong>tarjeta de una app</strong> para abrirla en una pestaña nueva.</li>
+      <li>El botón flotante <strong>«Volver»</strong>, a media altura del lateral derecho, te devuelve aquí desde cualquier pantalla.</li>
+      <li><strong>Cambio de sesión:</strong> mantén pulsado <strong>⚙ Configuración</strong> ≈1 segundo para volver a bloquear todos los accesos sin reiniciar la app.</li>
+      <li><strong>Administradores:</strong> un clic normal en ⚙ pide usuario y contraseña para gestionar aplicaciones, perfiles y contraseñas.</li>
+    </ol>
+  </div>
+</div>
 
 <!-- ═══════════ MAIN ═══════════════════════════════════════ -->
 <main>
