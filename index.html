@@ -436,7 +436,7 @@
 
   function lockSession() {
     unlockedInSession.clear();          // ← todo vuelve a pedir contraseña
-    closeTutorial();                    // el tutorial se pliega también
+    closeTutorial();                    // el modal de ayuda también se cierra
     closeGroupPassModal();              // cierra modales de acceso si quedaran abiertos
     closeLoginModal();
     renderHome();                       // de vuelta al inicio (todo bloqueado)
@@ -479,19 +479,34 @@
     }, true);
   }
 
-  // ── Tutorial desplegable del banner superior (pantalla Home) ──
-  let tutorialOpen = false;
+  // ── Modal emergente de ayuda / tutorial (botón ❓ del banner, Home) ──
+  // Se cierra con la ✕ de la esquina, pulsando fuera del cuadro (fondo
+  // .modal-bg — handler global) o con la tecla Escape. El estado se lee
+  // SIEMPRE del DOM (clase .hidden del propio modal): si el handler del
+  // fondo o Escape lo cierran por su cuenta, el botón ❓ sigue
+  // funcionando a la primera.
 
-  function toggleTutorial() {
-    tutorialOpen = !tutorialOpen;
+  function syncTutorialAria() {
     const panel = document.getElementById("tutorialPanel");
     const btn   = document.getElementById("btnTutorial");
-    if (panel) panel.classList.toggle("hidden", !tutorialOpen);
-    if (btn)   btn.setAttribute("aria-expanded", String(tutorialOpen));
+    if (panel && btn) btn.setAttribute("aria-expanded", String(!panel.classList.contains("hidden")));
+  }
+
+  function setTutorialOpen(open) {
+    const panel = document.getElementById("tutorialPanel");
+    if (!panel) return;
+    panel.classList.toggle("hidden", !open);
+    syncTutorialAria();
+  }
+
+  function toggleTutorial() {
+    const panel = document.getElementById("tutorialPanel");
+    if (!panel) return;
+    setTutorialOpen(panel.classList.contains("hidden")); // oculto → abrir
   }
 
   function closeTutorial() {
-    if (tutorialOpen) toggleTutorial();
+    setTutorialOpen(false);
   }
 
   function showGroup(group) {
@@ -2878,7 +2893,7 @@
     ["home","group","config"].forEach(v =>
       document.getElementById("view-" + v).classList.toggle("hidden", v !== id));
     // Vista activa en <body>: el botón «Tutorial» del banner solo se muestra
-    // en Home y, al salir de Home, el tutorial se pliega automáticamente
+    // en Home y, al salir de Home, el modal de ayuda se cierra automáticamente
     document.body.dataset.view = id;
     if (id !== "home") closeTutorial();
     // Limpiar modal de descripción al cambiar de vista (evita que quede flotando)
@@ -3006,6 +3021,7 @@
     // Cerrar cualquier modal al hacer clic en el fondo
     if (e.target.classList && e.target.classList.contains("modal-bg")) {
       e.target.classList.add("hidden");
+      if (e.target.id === "tutorialPanel") syncTutorialAria();
     }
   });
 
@@ -3018,6 +3034,7 @@
       const im = document.getElementById("importModal");
       if (im && !im.classList.contains("hidden")) closeImportModal();
       document.querySelectorAll(".modal-bg:not(.hidden)").forEach(m => m.classList.add("hidden"));
+      syncTutorialAria();   // el botón ❓ refleja el estado real del modal de ayuda
       const dm = document.getElementById("descModal");
       if (dm) dm.classList.add("hidden");
     }
@@ -3169,8 +3186,8 @@
     sortApps, setAppsFilter,
     exportData,
     toggleAccordion,
-    // Tutorial desplegable del banner superior (pantalla Home)
-    toggleTutorial,
+    // Modal de ayuda / tutorial (botón ❓ del banner, pantalla Home)
+    toggleTutorial, closeTutorial,
     // Detección de duplicados
     findSimilarApps,
     validateAppName,
@@ -3382,61 +3399,62 @@
     100% { background: var(--gold); color: var(--navy); }
   }
 
-  /* ── Panel del tutorial desplegable (bajo el banner superior) ── */
-  .tutorial-panel {
-    background: var(--white);
-    border-bottom: 3px solid var(--gold);
-    box-shadow: 0 6px 20px rgba(11, 37, 69, .18);
-    animation: tutorialSlide .3s ease;
-  }
-  .tutorial-inner {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 1.1rem 1rem 1.3rem;
+  /* ── Modal emergente de ayuda / tutorial (❓ del banner superior) ──
+     Reutiliza .modal-bg: el fondo oscuro difuminado se puede pulsar para
+     cerrar (handler global de modales) y el cuadro interior es un .modal.
+     .modal.tutorial-modal (0,2,0) gana a .modal (0,1,0) en el cascade
+     independientemente del orden: permite un cuadro más ancho (560px). */
+  .modal.tutorial-modal {
+    width: min(560px, 100%);
+    padding: 1.25rem 1.4rem 1.4rem;
+    animation: tutorialPop .25s ease;
   }
   .tutorial-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: .6rem;
+    margin-bottom: .8rem;
     gap: .75rem;
   }
-  .tutorial-title { font-weight: 700; color: var(--navy); font-size: 1rem; }
+  .tutorial-title { font-weight: 700; color: var(--navy); font-size: 1.05rem; }
   .tutorial-close {
     background: transparent;
     border: 1.5px solid var(--gold);
     color: var(--navy);
-    width: 32px; height: 32px;
+    width: 34px; height: 34px;
     padding: 0;
     border-radius: 50%;
     cursor: pointer;
-    font-size: .85rem;
+    font-size: .95rem;
     line-height: 1;
     display: inline-flex; align-items: center; justify-content: center;
-    transition: background .2s;
+    transition: background .2s, transform .15s;
     flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
   }
-  .tutorial-close:hover { background: var(--gold); }
+  .tutorial-close:hover  { background: var(--gold); transform: scale(1.08); }
+  .tutorial-close:active { background: var(--gold); transform: scale(.92); }
   .tutorial-steps {
     margin-left: 1.2rem;
     display: grid;
-    gap: .45rem;
+    gap: .5rem;
     color: var(--text);
     font-size: .92rem;
-    line-height: 1.45;
+    line-height: 1.5;
     text-align: left;
   }
   .tutorial-steps strong { color: var(--navy); }
-  @keyframes tutorialSlide {
-    from { opacity: 0; transform: translateY(-8px); }
-    to   { opacity: 1; transform: translateY(0); }
+  @keyframes tutorialPop {
+    from { opacity: 0; transform: scale(.94) translateY(10px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
   }
 
   /* Móvil estrecho: Tutorial queda como botón solo-icono */
   @media (max-width: 560px) {
     .btn-tutorial { padding: .45rem .55rem; }
     .btn-tutorial-text { display: none; }
+    .tutorial-modal { padding: 1.1rem 1rem 1.2rem; }
     .tutorial-steps { font-size: .85rem; }
   }
 
@@ -4897,7 +4915,7 @@
   /* ── Impresión ══════════════════════════════════════ */
   @media print {
     body { background: white; color: black; }
-    header, .btn-config, .btn-tutorial, .tutorial-panel, .toast, .modal-bg { display: none !important; }
+    header, .btn-config, .btn-tutorial, .tutorial-modal, .toast, .modal-bg { display: none !important; }
     .app-grid { grid-template-columns: repeat(4, 1fr); }
     .app-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
     .back-btn { display: none !important; }
@@ -4992,12 +5010,14 @@
   </div>
 </header>
 
-<!-- ═════════════ TUTORIAL DESPLEGABLE (bajo el banner superior, Home) ══ -->
-<div id="tutorialPanel" class="tutorial-panel hidden" role="region" aria-label="Tutorial: cómo usar el portal">
-  <div class="tutorial-inner">
+<!-- ═════════════ MODAL AYUDA / TUTORIAL (emergente) ══
+     Se cierra con la ✕ de la esquina, pulsando fuera del cuadro (fondo
+     .modal-bg, handler global) o con la tecla Escape -->
+<div id="tutorialPanel" class="modal-bg hidden" role="dialog" aria-modal="true" aria-label="Tutorial: cómo usar el portal">
+  <div class="modal tutorial-modal">
     <div class="tutorial-head">
       <span class="tutorial-title">📖 Cómo usar el Portal de aplicaciones</span>
-      <button type="button" class="tutorial-close" aria-label="Cerrar tutorial" onclick="ies.toggleTutorial()">✕</button>
+      <button type="button" class="tutorial-close" aria-label="Cerrar tutorial" onclick="ies.closeTutorial()">✕</button>
     </div>
     <ol class="tutorial-steps">
       <li><strong>Elige tu perfil</strong> en la pantalla de inicio: 👨‍🏫 Profesorado, 🗂️ Gestión, 📚 Recursos o 🤖 IA.</li>
