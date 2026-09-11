@@ -3364,28 +3364,30 @@
   .btn-about:hover  { background: var(--gold); transform: scale(1.05); }
   .btn-about:active { background: var(--gold); transform: scale(.94); }
 
-  /* Botón ❓ Tutorial del banner superior (solo pantalla Home) */
+  /* Botón circular de Ayuda «?» del banner superior (solo pantalla Home).
+     Gemelo del botón ⚠ (.btn-about): 40×40, anillo dorado 1.5px, radius 50%.
+     El «?» rosa (#ee3052, muestreado del diseño de referencia aportado)
+     pasa a navy sobre el relleno dorado del hover/active */
   .btn-tutorial {
     background: transparent;
     border: 1.5px solid var(--gold);
-    color: var(--gold2);
-    padding: .45rem .85rem;
-    border-radius: 8px;
+    color: #ee3052;
+    width: 40px; height: 40px;
+    padding: 0;
+    border-radius: 50%;
     cursor: pointer;
-    font-size: .78rem;
-    font-weight: 600;
-    letter-spacing: .04em;
-    transition: background .2s, color .2s;
-    white-space: nowrap;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .2s, color .2s, transform .15s;
     flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    min-height: 40px;
-    display: inline-flex; align-items: center;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
-  .btn-tutorial:hover  { background: var(--gold); color: var(--navy); }
-  .btn-tutorial:active { background: var(--gold); color: var(--navy); transform: scale(.96); }
+  .btn-tutorial:hover  { background: var(--gold); color: var(--navy); transform: scale(1.06); }
+  .btn-tutorial:active { background: var(--gold); color: var(--navy); transform: scale(.94); }
   /* Fuera del Home, el botón Tutorial se oculta (el tutorial pertenece
      a la pantalla de inicio; body[data-view] lo marca setView) */
   body[data-view]:not([data-view="home"]) .btn-tutorial { display: none; }
@@ -3452,8 +3454,6 @@
 
   /* Móvil estrecho: Tutorial queda como botón solo-icono */
   @media (max-width: 560px) {
-    .btn-tutorial { padding: .45rem .55rem; }
-    .btn-tutorial-text { display: none; }
     .tutorial-modal { padding: 1.1rem 1rem 1.2rem; }
     .tutorial-steps { font-size: .85rem; }
   }
@@ -5002,8 +5002,9 @@
             title="Información sobre esta app (Vibe Coding · reportar errores)"
             onclick="ies.showAboutModal()">⚠️</button>
     <button id="btnTutorial" class="btn-tutorial" type="button" aria-expanded="false" aria-controls="tutorialPanel"
+            aria-label="Ayuda: cómo usar el portal"
             title="Tutorial: cómo usar el portal"
-            onclick="ies.toggleTutorial()">❓<span class="btn-tutorial-text">&nbsp;Tutorial</span></button>
+            onclick="ies.toggleTutorial()">?</button>
     <button class="btn-config" type="button"
             title="Clic: acceso a Configuración · Mantener pulsado ≈1 s: cambiar de sesión (bloquear todo)"
             onclick="ies.showLoginModal()">⚙ Configuración</button>
