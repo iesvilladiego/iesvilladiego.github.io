@@ -531,8 +531,6 @@
     setView("group");
     // Asegurar que el botón Configuración sea visible en las vistas de grupo
     document.querySelector('.btn-config')?.classList.remove('hidden');
-    // Asegurar que el botón Configuración sea visible en las vistas de grupo
-    document.querySelector('.btn-config')?.classList.remove('hidden');
 
     // Lanzar descubrimiento asíncrono de iconos vía manifest/HTML
     // para cada tarjeta (buscará los iconos reales de la app y los
@@ -672,7 +670,8 @@
       ? ` data-fb="${escHtml(JSON.stringify(rest))}"`
       : "";
     return `
-      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="app-card">
+      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="app-card"
+         data-app-desc="${escHtml(a.desc || '')}">
         <div class="app-card-icon-wrap">
           <img src="${first}" alt="" loading="lazy"${fbAttr}
                data-app-url="${safeUrl}"
@@ -2943,6 +2942,7 @@
 
   // ── Modal de descripción (hover / tap) ────────────────
   let descHideTimer = null;
+  let _descCentered = false;  // abierto por gesto táctil → centrado en pantalla
 
   // ── Modal de descripción: sigue al ratón en desktop ──
   const _mousePos = { x: 0, y: 0 };
@@ -2950,14 +2950,15 @@
     _mousePos.x = e.clientX;
     _mousePos.y = e.clientY;
     const modal = document.getElementById('descModal');
-    if (modal && !modal.classList.contains('hidden') && window.matchMedia('(hover: hover)').matches && window.innerWidth >= 768) {
+    if (modal && !modal.classList.contains('hidden') && !_descCentered && window.innerWidth >= 768) {
       updateDescModalPosition();
     }
   });
 
-  function showDescModal(text) {
+  function showDescModal(text, opts = null) {
     clearTimeout(descHideTimer);
     if (!text || !text.trim()) return;
+    _descCentered = !!(opts && opts.centered);  // táctil → centrado; ratón → junto al cursor
     const modal = document.getElementById("descModal");
     document.getElementById("descModalText").textContent = text;
     modal.classList.remove("hidden");
@@ -2974,7 +2975,7 @@
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    if (vw < 768) {
+    if (_descCentered) {
       // Móvil: centrado en pantalla
       modal.style.top  = "50%";
       modal.style.left = "50%";
@@ -3012,9 +3013,101 @@
     }, 180);
   }
 
-  // Cerrar modales al hacer clic fuera o tocar fuera en móvil
+  // ── Descripción de apps en tarjeta (.app-card): hover / pulsación larga ──
+  // Ratón/lápiz (PointerEvents, pointerType ≠ touch): mantener el puntero
+  //   250 ms sobre la tarjeta → modal junto al cursor (mousemove lo mantiene
+  //   pegado). Se usan PointerEvents en lugar de media queries (hover:hover)
+  //   porque esas consultas fallan en entornos sin dispositivo apuntador y
+  //   no discriminan bien en híbridos; con pointerType el dedo NUNCA genera
+  //   hover y el ratón funciona siempre. Delegado en document: las tarjetas
+  //   se re-renderizan en cada showGroup y no hay que re-registrar nada.
+  // Táctil (eventos touch reales): pulsación larga ~550 ms → modal CENTRADO
+  //   (showDescModal(desc, {centered:true})); el gesto NO abre la app (se
+  //   suprime su click residual en fase capture) ni dispara el menú nativo
+  //   de llamada larga (CSS -webkit-touch-callout + contextmenu).
+  let _descHoverCard  = null;     // tarjeta actualmente bajo el puntero (ratón)
+  let _descHoverTimer = null;     // temporizador de intención de hover (250 ms)
+  let _cardLpTimer    = null;     // temporizador de pulsación larga en tarjetas
+  let _cardLpFired    = false;    // el gesto disparó → suprimir SU click residual
+  let _cardLpStart    = null;     // punto inicial del toque (cancela si hay scroll)
+  let _lastTouchAt    = 0;        // último contacto táctil (guarda del contextmenu)
+
+  // Hover con ratón/lápiz
+  document.addEventListener("pointerover", (e) => {
+    if (e.pointerType === "touch") return;  // el dedo nunca genera hover
+    const card = e.target.closest(".app-card");
+    if (!card) return;
+    // Reentrada en la misma tarjeta (borde/jitter): rearmar sin delay
+    if (card === _descHoverCard) { showDescModal(card.getAttribute("data-app-desc") || ""); return; }
+    clearTimeout(_descHoverTimer);
+    _descHoverTimer = setTimeout(() => {
+      _descHoverCard = card;
+      showDescModal(card.getAttribute("data-app-desc") || "");
+    }, 250);
+  });
+  document.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "touch") return;
+    const card = e.target.closest(".app-card");
+    if (!card) return;
+    if (card.contains(e.relatedTarget)) return;  // tránsito interno entre hijos
+    clearTimeout(_descHoverTimer);
+    if (_descHoverCard === card) {
+      _descHoverCard = null;
+      hideDescModal();  // con gracia de 180 ms (evita parpadeo al cruzar huecos)
+    }
+  });
+
+  // Pulsación larga en táctil (solo si la app TIENE descripción)
+  function cancelAppLongPress() { clearTimeout(_cardLpTimer); _cardLpTimer = null; }
+  document.addEventListener("touchstart", (e) => {
+    _lastTouchAt = Date.now();
+    const card = e.target.closest(".app-card");
+    if (!card) return;
+    const t = e.touches && e.touches[0];
+    if (t) _cardLpStart = { x: t.clientX, y: t.clientY };
+    const desc = (card.getAttribute("data-app-desc") || "").trim();
+    if (!desc) return;  // sin descripción no hay modal ni supresión de click
+    cancelAppLongPress();
+    _cardLpTimer = setTimeout(() => {
+      _cardLpTimer = null;
+      _cardLpFired = true;
+      setTimeout(() => { _cardLpFired = false; }, 700);  // auto-reset si el click nunca llega
+      showDescModal(desc, { centered: true });
+      try { if (navigator.vibrate) navigator.vibrate(30); } catch (_) {}
+    }, 550);
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    _lastTouchAt = Date.now();
+    if (!_cardLpTimer || !_cardLpStart) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    const dx = t.clientX - _cardLpStart.x, dy = t.clientY - _cardLpStart.y;
+    if (dx * dx + dy * dy > 100) cancelAppLongPress();  // scroll (>10px) cancela
+  }, { passive: true });
+  ["touchend", "touchcancel"].forEach(ev =>
+    document.addEventListener(ev, () => { _lastTouchAt = Date.now(); cancelAppLongPress(); }, { passive: true }));
+
+  // Click tras pulsación larga: NO abrir la app NI cerrar el modal recién
+  // mostrado (capture: corre antes que el cierre por «tocar fuera»).
   document.addEventListener("click", (e) => {
-    if (window.innerWidth < 768 && !e.target.closest(".desc-modal-box") && !e.target.closest(".desc-fi")) {
+    if (_cardLpFired) {
+      _cardLpFired = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.target.closest && e.target.closest(".app-card")) hideDescModal(true);
+  }, true);
+
+  // Sin menú contextual nativo en las tarjetas durante gestos táctiles
+  // recientes (el clic derecho del ratón en desktop queda intacto).
+  document.addEventListener("contextmenu", (e) => {
+    if (Date.now() - _lastTouchAt > 1200) return;
+    if (e.target.closest && e.target.closest(".app-card")) e.preventDefault();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".desc-modal-box") && !e.target.closest(".desc-fi")) {
       const dm = document.getElementById("descModal");
       if (dm) dm.classList.add("hidden");
     }
@@ -3315,6 +3408,15 @@
     font-size: .72rem;
     color: var(--gold2);
     margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* El bloque de marca puede encoger (min-width:0): permite que el h1
+     aplique su ellipsis en pantallas estrechas en vez de desbordar */
+  .header-brand {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .btn-config {
@@ -3453,11 +3555,6 @@
   }
 
   /* Móvil estrecho: Tutorial queda como botón solo-icono */
-  @media (max-width: 560px) {
-    .tutorial-modal { padding: 1.1rem 1rem 1.2rem; }
-    .tutorial-steps { font-size: .85rem; }
-  }
-
   /* ══ Main wrapper ═══════════════════════════════════ */
   main {
     max-width: 960px;
@@ -3681,14 +3778,17 @@
     }
 
     .main-btn {
-      padding: .75rem .6rem !important;
+      padding: .9rem .6rem .75rem !important;
       min-width: unset !important;
       max-width: none !important;
       flex-direction: column;
       gap: .3rem;
       font-size: .82rem !important;
     }
-    .main-btn .btn-icon { font-size: 1.6rem; margin-bottom: 0; }
+    /* line-height 1.25: los emoji pintan por encima de su caja de línea
+       (métricas del font emoji); el alto extra evita que invadan la
+       franja dorada superior de la tarjeta */
+    .main-btn .btn-icon { font-size: 1.5rem; line-height: 1.25; margin-bottom: 0; }
   }
 
   .group-heading {
@@ -3726,6 +3826,15 @@
     border-color: var(--gold);
   }
   .app-card:active { transform: scale(.96); }
+
+  /* Task 16: pulsación larga en móvil (descripción de la app) — sin menú
+     emergente nativo de iOS (callout/vista previa de enlaces) y sin
+     selección de texto accidental durante el gesto. */
+  .app-card, .app-card * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+            user-select: none;
+  }
 
   .app-card-icon-wrap {
     width: 72px; height: 72px;
@@ -4576,6 +4685,7 @@
     padding: 1.75rem 1.5rem 1.5rem;
     width: min(420px, 100%);
     max-height: 90vh;
+    max-height: 90dvh;   /* móvil: respeta la barra de direcciones */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -4644,6 +4754,41 @@
      RESPONSIVE — Mobile First
      ══════════════════════════════════════════════════════ */
 
+  /* ══ Móvil y pantallas estrechas (≤ 560px) ════════════════════════ */
+  @media (max-width: 560px) {
+    /* Header compacto: ⚙ pasa a solo-icono y se reduce el aire para que
+       título + ⚠ + ? + ⚙ quepan SIEMPRE en una sola fila (320px incl.) */
+    header { gap: .5rem; }
+    .header-actions { gap: .4rem; }
+    .btn-config { padding: .45rem .55rem; font-size: 1rem; }
+    .btn-config-text { display: none; }
+
+    /* Home compacto: escudo y textos reducidos para que los 4 perfiles
+       quepan en pantalla sin desplazamiento en la mayoría de móviles */
+    .shield-wrap {
+      width: 170px; height: 170px;
+      margin: 1rem auto .9rem;
+      box-shadow: 0 0 0 6px var(--gold), var(--shadow);
+    }
+    .shield-wrap img { width: 146px; height: 146px; }
+    .home-title { font-size: 1.2rem; }
+    .home-sub { font-size: .8rem; margin-bottom: 1rem; }
+
+    /* Modal de ayuda compacto: más ancho útil (fondo con menos margen),
+       tipografía y espaciados ajustados, alto con dvh (croma móvil) */
+    .modal-bg { padding: .75rem; }
+    .modal.tutorial-modal { padding: 1rem .95rem 1.1rem; max-height: 92dvh; }
+    .tutorial-head { margin-bottom: .6rem; }
+    .tutorial-title { font-size: .95rem; }
+    .tutorial-close { width: 30px; height: 30px; font-size: .85rem; }
+    .tutorial-steps {
+      font-size: .8rem;
+      gap: .4rem;
+      margin-left: .9rem;
+      line-height: 1.45;
+    }
+  }
+
   /* ── Móvil pequeño (< 400px) ─────────────────────── */
   @media (max-width: 400px) {
     .back-btn {
@@ -4663,12 +4808,13 @@
     }
     .main-btn .btn-icon { font-size: 2.5rem; }
 
-    /* Escudo +50% sobre la versión anterior (era 140/120) */
+    /* Escudo aún más compacto en móviles pequeños (el tamaño general
+       vive en el bloque ≤560px; aquí 150px para pantallas de bolsillo) */
     .shield-wrap {
-      width: 210px; height: 210px;
-      box-shadow: 0 0 0 7px var(--gold), var(--shadow);
+      width: 150px; height: 150px;
+      box-shadow: 0 0 0 5px var(--gold), var(--shadow);
     }
-    .shield-wrap img { width: 180px; height: 180px; }
+    .shield-wrap img { width: 128px; height: 128px; }
 
     .app-grid {
       grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
@@ -4993,7 +5139,7 @@
 
 <!-- ═══════════ CABECERA ═══════════════════════════════════ -->
 <header>
-  <div>
+  <div class="header-brand">
     <h1>IES Virgen de Villadiego</h1>
     <div class="subtitle">Portal de aplicaciones</div>
   </div>
@@ -5005,9 +5151,9 @@
             aria-label="Ayuda: cómo usar el portal"
             title="Tutorial: cómo usar el portal"
             onclick="ies.toggleTutorial()">?</button>
-    <button class="btn-config" type="button"
+    <button class="btn-config" type="button" aria-label="Configuración"
             title="Clic: acceso a Configuración · Mantener pulsado ≈1 s: cambiar de sesión (bloquear todo)"
-            onclick="ies.showLoginModal()">⚙ Configuración</button>
+            onclick="ies.showLoginModal()">⚙<span class="btn-config-text">&nbsp;Configuración</span></button>
   </div>
 </header>
 
@@ -5327,7 +5473,7 @@
 
 <!-- ═══════════ MODAL DESCRIPCIÓN (hover / tap) ═══════════ -->
 <div id="descModal" class="hidden" style="position:fixed;top:0;left:0;z-index:9000;pointer-events:none;">
-  <div class="desc-modal-box">
+  <div class="desc-modal-box" role="status">
     <p id="descModalText"></p>
   </div>
 </div>
