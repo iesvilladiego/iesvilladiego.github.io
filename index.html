@@ -656,6 +656,11 @@
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="18" font-size="20">🔗</text></svg>'
   );
 
+  // Etiquetas de los checks de acceso del profesorado (alta/edición, Task 17).
+  // Se muestran PARPADEANDO junto a la descripción en el modal de la tarjeta.
+  const LOGIN_IDEIA_LABEL = "Login del profesorado con usuario IdEA";
+  const LOGIN_USU_LABEL   = "Login del profesorado con usuario / usuario.";
+
   function appCard(a) {
     // Sanitización XSS: escapar nombre y validar URL (mejora portada de TecDeA)
     const safeName = escHtml(a.name || 'Sin nombre');
@@ -671,7 +676,8 @@
       : "";
     return `
       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="app-card"
-         data-app-desc="${escHtml(a.desc || '')}">
+         data-app-desc="${escHtml(a.desc || '')}"
+         data-app-login="${escHtml(a.loginIdeia ? LOGIN_IDEIA_LABEL : (a.loginUsu ? LOGIN_USU_LABEL : ''))}">
         <div class="app-card-icon-wrap">
           <img src="${first}" alt="" loading="lazy"${fbAttr}
                data-app-url="${safeUrl}"
@@ -1077,7 +1083,7 @@
         <td data-label="Rec." class="chk"><input type="checkbox" ${a.recursos       ? "checked" : ""} data-field="recursos"></td>
         <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
         <td data-label="Activa" class="chk chk-activa"><input type="checkbox" ${inactive ? "" : "checked"} data-field="active" title="Desmarca para ocultar la app en el perfil (queda desactivada, NO se borra)"></td>
-        <td data-label="" class="chk"><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
+        <td data-label="" class="chk"><button class="btn-edit" onclick="ies.editApp(${i})" title="Editar" aria-label="Editar aplicación">✎</button><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
       </tr>`;}).join("");
 
     // ══ LIMPIAR EVENT LISTENERS ANTERIORES (evita memory leaks — mejora TecDeA) ══
@@ -1620,27 +1626,45 @@
     if (el) el.textContent = msg || "";
   }
 
-  function showAddAppModal() {
+  // Índice de la app en edición dentro del modal de alta (-1 = alta nueva)
+  let _editAppIndex = -1;
+
+  // Modal de ALTA (sin argumento) y de EDICIÓN (editIndex >= 0, Task 17):
+  // mismo formato; en edición precarga los datos, cambia título/botón y no
+  // aplica el límite MAX_APPS (editar no crea aplicaciones nuevas).
+  function showAddAppModal(editIndex = -1) {
     collectTableData();
+
+    const editing = editIndex >= 0 && !!apps[editIndex];
+    _editAppIndex = editing ? editIndex : -1;
+    const a = editing ? apps[editIndex] : null;
 
     // Límite razonable (mismo MAX_APPS que el antiguo alta por fila)
     const MAX_APPS = 200;
-    if (apps.length >= MAX_APPS) {
+    if (!editing && apps.length >= MAX_APPS) {
       showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
       return;
     }
 
-    // Reset del formulario
-    document.getElementById("addAppName").value = "";
-    document.getElementById("addAppDesc").value = "";
-    document.getElementById("addAppUrl").value = URL_PREFIX;
-    ["addAppProfesorado", "addAppGestion", "addAppRecursos", "addAppIa"].forEach(id => {
-      document.getElementById(id).checked = false;
-    });
-    // Por defecto, la nueva app se crea ACTIVA (la casilla se puede desmarcar)
-    document.getElementById("addAppActive").checked = true;
-    document.getElementById("addAppActiveNote").classList.add("hidden");
+    // Reset del formulario (en edición, precargado con los datos de la app)
+    document.getElementById("addAppName").value = editing ? (a.name || "") : "";
+    document.getElementById("addAppDesc").value = editing ? (a.desc || "") : "";
+    document.getElementById("addAppUrl").value  = editing ? (a.url || URL_PREFIX) : URL_PREFIX;
+    document.getElementById("addAppProfesorado").checked = editing ? !!a.profesorado : false;
+    document.getElementById("addAppGestion").checked     = editing ? !!a.gestion : false;
+    document.getElementById("addAppRecursos").checked    = editing ? !!a.recursos : false;
+    document.getElementById("addAppIa").checked          = editing ? !!a.ia : false;
+    // Checks de acceso del profesorado (excluyentes: uno U otro, o ninguno)
+    document.getElementById("addAppLoginIdeia").checked  = editing ? !!a.loginIdeia : false;
+    document.getElementById("addAppLoginUsu").checked    = editing ? !!a.loginUsu : false;
+    // Por defecto, la nueva app se crea ACTIVA; en edición se respeta su estado
+    const activa = editing ? a.active !== false : true;
+    document.getElementById("addAppActive").checked = activa;
+    document.getElementById("addAppActiveNote").classList.toggle("hidden", activa);
     document.getElementById("addAppNameWarn").classList.add("hidden");
+    // Título y botón según el modo (alta ↔ edición)
+    document.getElementById("addAppTitle").textContent = editing ? "✏️ Editar aplicación" : "＋ Nueva aplicación";
+    document.getElementById("addAppConfirmBtn").textContent = editing ? "💾 Guardar cambios" : "＋ Añadir aplicación";
     const nameInp = document.getElementById("addAppName");
     nameInp.style.borderColor = "";
     nameInp.style.boxShadow = "";
@@ -1652,6 +1676,23 @@
 
   function closeAddAppModal() {
     document.getElementById("addAppModal").classList.add("hidden");
+    _editAppIndex = -1;  // al cerrar (✕, fondo o Escape) se sale del modo edición
+  }
+
+  // Abre el modal de alta en modo EDICIÓN, precargado con la app i
+  function editApp(i) {
+    if (i < 0 || i >= apps.length) return;
+    showAddAppModal(i);
+  }
+
+  // Checks de acceso del profesorado EXCLUYENTES: marcar uno desmarca el
+  // otro (se permite uno U otro, o ninguno — nunca ambos). Task 17.
+  function initLoginChecks() {
+    const ideia = document.getElementById("addAppLoginIdeia");
+    const usu   = document.getElementById("addAppLoginUsu");
+    if (!ideia || !usu) return;
+    ideia.addEventListener("change", () => { if (ideia.checked) usu.checked = false; });
+    usu.addEventListener("change",   () => { if (usu.checked) ideia.checked = false; });
   }
 
   function addAppFormChanged() {
@@ -1702,8 +1743,8 @@
     _addAppNameTimer = setTimeout(addAppRenderNameWarn, 600);
   }
 
-  // Confirmación del alta: valida las condiciones y añade la app a la tabla
-  // + autoguardado tolerante (persistAppsChanges)
+  // Confirmación del alta/edición: valida las condiciones, aplica los cambios
+  // a la tabla y persiste con autoguardado tolerante (persistAppsChanges)
   function confirmAddApp() {
     collectTableData();
 
@@ -1715,6 +1756,9 @@
     const rec  = !!document.getElementById("addAppRecursos").checked;
     const ia   = !!document.getElementById("addAppIa").checked;
     const activa = !!document.getElementById("addAppActive").checked;
+    // Checks de acceso del profesorado (excluyentes: uno U otro, o ninguno)
+    const loginIdeia = !!document.getElementById("addAppLoginIdeia").checked;
+    const loginUsu   = !!document.getElementById("addAppLoginUsu").checked;
 
     setAddAppError("");
     if (!name) {
@@ -1727,24 +1771,37 @@
       return;
     }
 
+    const editing = _editAppIndex >= 0 && !!apps[_editAppIndex];
+
     const MAX_APPS = 200;
-    if (apps.length >= MAX_APPS) {
+    if (!editing && apps.length >= MAX_APPS) {
       closeAddAppModal();
       showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
       return;
     }
 
-    // Detección de duplicados/similares (aviso, no bloqueo — igual que en la tabla)
-    const similar = findSimilarApps(name, -1, 0.75);
+    // Detección de duplicados/similares (aviso, no bloqueo — igual que en la
+    // tabla). En edición, la propia app queda excluida de la comparación.
+    const similar = findSimilarApps(name, editing ? _editAppIndex : -1, 0.75);
 
-    apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa });
+    if (editing) {
+      // Edición: mutar la app existente (conserva cualquier propiedad extra)
+      const a = apps[_editAppIndex];
+      a.name = name; a.desc = desc; a.url = url;
+      a.profesorado = pro; a.gestion = ges; a.recursos = rec; a.ia = ia;
+      a.active = activa;
+      a.loginIdeia = loginIdeia; a.loginUsu = loginUsu;
+    } else {
+      apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu });
+    }
 
-    // Mostrar la nueva app: reset de filtros (comportamiento del antiguo addAppRow)
-    resetAppsFilterUI();
+    // Refrescar la tabla. En el alta se resetean los filtros (comportamiento
+    // del antiguo addAppRow); en edición se mantienen los actuales.
+    if (!editing) resetAppsFilterUI();
     buildConfigTable();
     closeAddAppModal();
 
-    let msg = `✓ Aplicación «${name}» añadida`;
+    let msg = editing ? `✓ Cambios guardados en «${name}»` : `✓ Aplicación «${name}» añadida`;
     if (!activa) msg += " 🚫 (desactivada: oculta en su perfil)";
     if (similar.length > 0) {
       const exact = similar.find(s => s.isExact);
@@ -2961,6 +3018,15 @@
     _descCentered = !!(opts && opts.centered);  // táctil → centrado; ratón → junto al cursor
     const modal = document.getElementById("descModal");
     document.getElementById("descModalText").textContent = text;
+    // Acceso del profesorado (check del alta/edición): solo si la tarjeta lo
+    // declara; la línea parpadea sola (ver .desc-modal-login). Con textContent
+    // (nunca innerHTML) para mantener la prueba de XSS.
+    const loginEl = document.getElementById("descModalLogin");
+    if (loginEl) {
+      const login = ((opts && opts.login) || "").trim();
+      loginEl.textContent = login ? ("🔑 " + login) : "";
+      loginEl.classList.toggle("hidden", !login);
+    }
     modal.classList.remove("hidden");
     updateDescModalPosition();
   }
@@ -3038,11 +3104,11 @@
     const card = e.target.closest(".app-card");
     if (!card) return;
     // Reentrada en la misma tarjeta (borde/jitter): rearmar sin delay
-    if (card === _descHoverCard) { showDescModal(card.getAttribute("data-app-desc") || ""); return; }
+    if (card === _descHoverCard) { showAppDescModal(card); return; }
     clearTimeout(_descHoverTimer);
     _descHoverTimer = setTimeout(() => {
       _descHoverCard = card;
-      showDescModal(card.getAttribute("data-app-desc") || "");
+      showAppDescModal(card);
     }, 250);
   });
   document.addEventListener("pointerout", (e) => {
@@ -3056,6 +3122,15 @@
       hideDescModal();  // con gracia de 180 ms (evita parpadeo al cruzar huecos)
     }
   });
+
+  // Muestra el modal de descripción de una tarjeta, con su línea de acceso
+  // del profesorado (check del alta/edición) si la app la tiene declarada.
+  function showAppDescModal(card, opts = null) {
+    showDescModal(
+      card.getAttribute("data-app-desc") || "",
+      Object.assign({}, opts || {}, { login: card.getAttribute("data-app-login") || "" })
+    );
+  }
 
   // Pulsación larga en táctil (solo si la app TIENE descripción)
   function cancelAppLongPress() { clearTimeout(_cardLpTimer); _cardLpTimer = null; }
@@ -3072,7 +3147,7 @@
       _cardLpTimer = null;
       _cardLpFired = true;
       setTimeout(() => { _cardLpFired = false; }, 700);  // auto-reset si el click nunca llega
-      showDescModal(desc, { centered: true });
+      showAppDescModal(card, { centered: true });
       try { if (navigator.vibrate) navigator.vibrate(30); } catch (_) {}
     }, 550);
   }, { passive: true });
@@ -3271,7 +3346,7 @@
     showAboutModal, closeAboutModal,
     renderHome, renderConfig, saveConfig,
     // Alta de aplicaciones vía modal (sustituye al antiguo addAppRow)
-    showAddAppModal, closeAddAppModal, confirmAddApp,
+    showAddAppModal, closeAddAppModal, confirmAddApp, editApp,
     addAppNameInput, addAppFormChanged,
     addAdminRow, saveAdminsConfig,
     saveGroupPasswordsConfig,
@@ -3296,6 +3371,8 @@
   loadData();
   // Listeners de pulsación larga en ⚙ Configuración (cambio de sesión)
   initSessionLock();
+  // Checks de login excluyentes del modal de alta/edición de apps (Task 17)
+  initLoginChecks();
 
   // Registrar listeners de autosave en los campos estáticos de contraseñas por perfil
   ['passProfesorado', 'passGestion', 'passRecursos', 'passIa'].forEach(id => {
@@ -4189,6 +4266,19 @@
   .btn-del:hover { transform: scale(1.3); background: rgba(192,57,43,.08); }
   .btn-del:active { transform: scale(1.1); }
 
+  /* Task 17: botón EDITAR de cada fila (gemelo de .btn-del, en navy) */
+  .btn-edit {
+    background: none; border: none; cursor: pointer;
+    color: var(--navy); font-size: 1.05rem;
+    transition: transform .15s;
+    min-width: 40px; min-height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-edit:hover { transform: scale(1.3); background: rgba(11,37,69,.08); }
+  .btn-edit:active { transform: scale(1.1); }
+
   .desc-cell { min-width: 160px; }
   .desc-fi    { cursor: help; }
 
@@ -4223,6 +4313,24 @@
   @keyframes descFadeIn {
     from { opacity: 0; transform: translateY(-4px) scale(.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Task 17: línea de acceso del profesorado — PARPADEA solo ella */
+  .desc-modal-login {
+    margin-top: .55rem;
+    padding-top: .5rem;
+    border-top: 1px dashed rgba(11,37,69,.18);
+    font-size: .8rem;
+    font-weight: 800;
+    color: #c0392b;
+    animation: descLoginBlink 1.1s ease-in-out infinite;
+  }
+  @keyframes descLoginBlink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .15; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .desc-modal-login { animation: none; }
   }
 
   .actions {
@@ -4588,6 +4696,30 @@
     -webkit-user-select: none;
   }
   .addapp-profiles input[type=checkbox] {
+    width: 17px; height: 17px;
+    accent-color: var(--navy);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* Task 17: checks de login del profesorado (excluyentes) en alta/edición */
+  .addapp-login-checks {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    margin-bottom: .2rem;
+  }
+  .addapp-login-checks label {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .85rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .addapp-login-checks input[type=checkbox] {
     width: 17px; height: 17px;
     accent-color: var(--navy);
     cursor: pointer;
@@ -5475,6 +5607,7 @@
 <div id="descModal" class="hidden" style="position:fixed;top:0;left:0;z-index:9000;pointer-events:none;">
   <div class="desc-modal-box" role="status">
     <p id="descModalText"></p>
+    <p id="descModalLogin" class="desc-modal-login hidden"></p>
   </div>
 </div>
 
@@ -5500,7 +5633,7 @@
 <!-- ═══════════ MODAL NUEVA APLICACIÓN ═══════════════════ -->
 <div id="addAppModal" class="modal-bg hidden">
   <div class="modal">
-    <h2>＋ Nueva aplicación</h2>
+    <h2 id="addAppTitle">＋ Nueva aplicación</h2>
     <form onsubmit="event.preventDefault(); ies.confirmAddApp()" autocomplete="off" novalidate>
       <div class="fi-label">Nombre <span class="req">*</span></div>
       <input type="text" id="addAppName" class="fi" placeholder="Nombre de la aplicación" oninput="ies.addAppNameInput()">
@@ -5519,6 +5652,12 @@
         <label><input type="checkbox" id="addAppGestion" onchange="ies.addAppFormChanged()"> 🗂️ Gestión</label>
         <label><input type="checkbox" id="addAppRecursos" onchange="ies.addAppFormChanged()"> 📚 Recursos</label>
         <label><input type="checkbox" id="addAppIa" onchange="ies.addAppFormChanged()"> 🤖 IA</label>
+      </div>
+
+      <div class="fi-label">Login del profesorado (opcional)</div>
+      <div class="addapp-login-checks">
+        <label><input type="checkbox" id="addAppLoginIdeia" onchange="ies.addAppFormChanged()"> Login del profesorado con usuario IdEA</label>
+        <label><input type="checkbox" id="addAppLoginUsu" onchange="ies.addAppFormChanged()"> Login del profesorado con usuario / usuario.</label>
       </div>
 
       <div class="fi-label">Estado</div>
