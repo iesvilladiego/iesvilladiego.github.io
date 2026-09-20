@@ -1261,6 +1261,17 @@
       const c = btn.querySelector('.filter-count');
       if (c) c.textContent = counts[btn.dataset.filter] ?? 0;
     });
+    // Recuento global «Mostrando N de M» sobre la tabla (Task 18): cuántas
+    // apps cumplen los filtros activos frente al total de la base de datos,
+    // para que cualquier diferencia sea visible de un vistazo.
+    const meta = document.getElementById('appsShownTotal');
+    if (meta) {
+      const tbody = document.querySelector('#appsTable tbody');
+      const n = tbody ? tbody.querySelectorAll('tr:not(.no-apps-row)').length : 0;
+      const sust = apps.length === 1 ? 'aplicación' : 'aplicaciones';
+      const conFiltros = (appsFilter !== 'all' || appsStateFilter !== 'all');
+      meta.textContent = `Mostrando ${n} de ${apps.length} ${sust}` + (conFiltros ? ' · filtros activos' : '');
+    }
   }
 
   function collectTableData() {
@@ -3216,23 +3227,77 @@
   //   cualquier otro que estuviera desplegado.
   // - Al pulsar de nuevo sobre un acordeón abierto, se repliega.
 
+  // ── Animación de acordeones con la altura REAL medida (Task 18) ──
+  // La técnica antigua «max-height: 0 → 4000px» RECORTABA el contenido más
+  // alto que el techo (la tabla de apps en móvil mide ~11.000px: las filas
+  // por debajo de 4000px quedaban invisibles, con o sin filtros). Ahora JS
+  // anima hacia la altura real (scrollHeight) y, al terminar, libera el
+  // techo (max-height:none) para que el contenido pueda crecer sin cortarse.
+  function accContentOf(acc) {
+    return acc ? acc.querySelector('.acc-content') : null;
+  }
+
+  // Al terminar la animación, quita el max-height inline para que mande el
+  // CSS (0 cerrado / none abierto) y el contenido nunca quede recortado.
+  function armAccContentCleanup(c) {
+    if (!c) return;
+    if (c._accTe) c.removeEventListener('transitionend', c._accTe);
+    const h = (e) => {
+      if (e.target !== c || e.propertyName !== 'max-height') return;
+      c.style.maxHeight = '';
+      c.removeEventListener('transitionend', h);
+      clearTimeout(c._accTeTimer);
+      c._accTe = null;
+    };
+    c._accTe = h;
+    c.addEventListener('transitionend', h);
+    // Red de seguridad: si transitionend no llega (pestaña oculta, animación
+    // interrumpida), liberar el techo igualmente a los 650 ms.
+    clearTimeout(c._accTeTimer);
+    c._accTeTimer = setTimeout(() => {
+      c.style.maxHeight = '';
+      if (c._accTe) { c.removeEventListener('transitionend', c._accTe); c._accTe = null; }
+    }, 650);
+  }
+
   function toggleAccordion(id) {
     const target = document.querySelector(`.accordion[data-acc="${id}"]`);
     if (!target) return;
     const isOpen = target.classList.contains('open');
 
-    // Cerrar todos los acordeones abiertos
+    // Cerrar todos los acordeones abiertos, animando desde su altura actual
     document.querySelectorAll('.accordion.open').forEach(acc => {
+      const c = accContentOf(acc);
+      if (c) {
+        // Congelar la altura visible actual (de none a px no hay transición:
+        // el salto es invisible porque coincide con la altura real),
+        // forzar reflow para fijar el punto de partida y animar hacia 0.
+        c.style.maxHeight = c.clientHeight + 'px';
+        void c.offsetHeight;
+      }
       acc.classList.remove('open');
       const icon = acc.querySelector('.acc-icon');
       if (icon) icon.style.transform = '';
+      if (c) { c.style.maxHeight = '0px'; armAccContentCleanup(c); }
     });
 
     // Si el objetivo no estaba abierto, abrirlo (efecto acordeón exclusivo)
     if (!isOpen) {
+      const c = accContentOf(target);
+      if (c) {
+        // Punto de partida: la altura visible actual (0 si estaba cerrado o
+        // la altura a mitad de animación si se reabre durante un cierre)
+        c.style.maxHeight = c.clientHeight + 'px';
+        void c.offsetHeight;
+      }
       target.classList.add('open');
       const icon = target.querySelector('.acc-icon');
       if (icon) icon.style.transform = 'rotate(180deg)';
+      if (c) {
+        // Animar hasta la altura REAL del contenido (nunca un techo fijo)
+        c.style.maxHeight = c.scrollHeight + 'px';
+        armAccContentCleanup(c);
+      }
 
       // Al abrir el acordeón de Exportar, refrescar el panel de selección
       // de aplicaciones (mejora portada de TecDeA)
@@ -4038,7 +4103,12 @@
     /* Cuando se abra, anima a un max-height grande */
   }
   .accordion.open .acc-content {
-    max-height: 4000px;       /* suficiente para la sección más grande */
+    /* La altura la anima toggleAccordion con la medida REAL del contenido
+       (scrollHeight) y, al terminar, deja max-height:none (Task 18). Antes el
+       techo fijo de 4000px RECORTABA la tabla de aplicaciones en móvil
+       (~11.000px con 28 apps: las filas de abajo quedaban invisibles e
+       inaccesibles, con o sin filtros). */
+    max-height: none;
     padding: 1.25rem;
     transition: max-height .5s ease, padding .25s ease;
   }
@@ -5222,6 +5292,14 @@
   .tbl-wrap::-webkit-scrollbar { height: 4px; }
   .tbl-wrap::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
 
+  /* Recuento «Mostrando N de M aplicaciones» sobre la tabla (Task 18) */
+  .tbl-meta {
+    font-size: .8rem;
+    color: var(--muted);
+    text-align: right;
+    margin: .45rem 0 .5rem;
+  }
+
   /* Prevenir selección de texto en botones (móvil) */
   button, .app-card, .btn-config, .back-btn {
     user-select: none;
@@ -5385,6 +5463,7 @@
           <button class="btn btn-ghost" onclick="ies.sortApps('url')">↕ Ordenar por URL</button>
           <button class="btn btn-primary" onclick="ies.saveConfig()">💾 Guardar aplicaciones</button>
         </div>
+        <div class="tbl-meta" id="appsShownTotal" role="status" aria-live="polite"></div>
         <div class="tbl-wrap">
           <table id="appsTable">
             <thead>
