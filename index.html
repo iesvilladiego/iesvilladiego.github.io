@@ -180,6 +180,7 @@
 
   // ── Estado global ──────────────────────────────────────
   let apps      = [];
+  let deletedApps = [];          // Papelera: apps quitadas de la lista, restaurables (Task 19)
   let admins    = [{ user: "admin", pass: "admin" }];           // Multi-administrador
   let groupPasswords = { profesorado: "", gestion: "", recursos: "", ia: "" };
   let pendingGroup = null;   // Grupo pendiente de validar contraseña
@@ -197,6 +198,7 @@
   const adminsRef      = ref(db, `${ROOT}/admins`);            // NUEVO: lista de administradores
   const groupPassRef   = ref(db, `${ROOT}/groupPasswords`);    // NUEVO: contraseñas por perfil
   const legacyAdminRef = ref(db, `${ROOT}/admin`);             // Compatibilidad versión anterior
+  const deletedAppsRef = ref(db, `${ROOT}/deletedApps`);       // Task 19: papelera de apps borradas
 
   // ── Normalización de datos desde Firebase ─────────────
   // Firebase puede devolver un array (claves 0..n secuenciales) o un objeto
@@ -229,7 +231,8 @@
       get(appsRef),
       get(adminsRef),
       get(groupPassRef),
-      get(legacyAdminRef)
+      get(legacyAdminRef),
+      get(deletedAppsRef)
     ]);
 
     // Apps — siempre se procesa aunque las demás fallen
@@ -244,6 +247,18 @@
       }
     } else {
       console.warn("No se pudo cargar 'apps' desde Firebase:", results[0].reason);
+    }
+
+    // Papelera (Task 19): apps eliminadas de la lista principal, restaurables
+    if (results[4].status === "fulfilled") {
+      const snap = results[4].value;
+      if (snap.exists()) {
+        deletedApps = normalizeList(snap.val()).filter(a => a && typeof a === "object");
+        // Misma migración de categoría antigua que en apps (administrativa → recursos)
+        deletedApps = deletedApps.map(migrateAppCategories);
+      }
+    } else {
+      console.warn("No se pudo cargar 'deletedApps' desde Firebase:", results[4].reason);
     }
 
     // Administradores (multi-admin) — con migración legacy
@@ -344,6 +359,15 @@
   async function saveGroupPasswords() {
     try { await set(groupPassRef, groupPasswords); return true; }
     catch(e) { console.error("Error guardando groupPasswords:", e); return false; }
+  }
+
+  // Papelera de apps borradas (Task 19): escritura completa del nodo.
+  // Con la lista vacía se elimina el nodo (set null) para no dejar basura.
+  async function saveDeletedApps() {
+    try {
+      await withTimeout(set(deletedAppsRef, deletedApps.length ? deletedApps : null), 5000);
+      return true;
+    } catch(e) { console.error("Error guardando deletedApps:", e); return false; }
   }
 
   // ══════════════════════════════════════════════════════
@@ -1183,6 +1207,8 @@
 
     // Refrescar los contadores de la barra de filtros (nº de apps por botón)
     updateFilterCounts();
+    // Contador de la papelera en el botón de restauración (Task 19)
+    updateRestoreBtnCount();
     // La tabla cambió (añadir/borrar/importar/filtrar/ordenar): recolocar
     // el botón Volver flotante para que siga sin tapar controles
     scheduleBackBtnUpdate();
@@ -1640,42 +1666,52 @@
   // Índice de la app en edición dentro del modal de alta (-1 = alta nueva)
   let _editAppIndex = -1;
 
+  // Índice de la app en restauración dentro de deletedApps (-1 = sin restauración, Task 19)
+  let _restoreIdx = -1;
+
   // Modal de ALTA (sin argumento) y de EDICIÓN (editIndex >= 0, Task 17):
   // mismo formato; en edición precarga los datos, cambia título/botón y no
   // aplica el límite MAX_APPS (editar no crea aplicaciones nuevas).
-  function showAddAppModal(editIndex = -1) {
+  function showAddAppModal(editIndex = -1, restoreIndex = -1) {
     collectTableData();
 
-    const editing = editIndex >= 0 && !!apps[editIndex];
-    _editAppIndex = editing ? editIndex : -1;
-    const a = editing ? apps[editIndex] : null;
+    // Modo restauración (Task 19): la app se precarga desde la papelera
+    const a0 = restoreIndex >= 0 && !!deletedApps[restoreIndex] ? deletedApps[restoreIndex] : null;
+    _restoreIdx = a0 ? restoreIndex : -1;
 
-    // Límite razonable (mismo MAX_APPS que el antiguo alta por fila)
+    const editing = _restoreIdx < 0 && editIndex >= 0 && !!apps[editIndex];
+    _editAppIndex = editing ? editIndex : -1;
+    const a = editing ? apps[editIndex] : a0;
+
+    // Límite razonable (mismo MAX_APPS que el antiguo alta por fila).
+    // No se aplica al restaurar: se recupera una app que ya existía.
     const MAX_APPS = 200;
-    if (!editing && apps.length >= MAX_APPS) {
+    if (!editing && _restoreIdx < 0 && apps.length >= MAX_APPS) {
       showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
       return;
     }
 
-    // Reset del formulario (en edición, precargado con los datos de la app)
-    document.getElementById("addAppName").value = editing ? (a.name || "") : "";
-    document.getElementById("addAppDesc").value = editing ? (a.desc || "") : "";
-    document.getElementById("addAppUrl").value  = editing ? (a.url || URL_PREFIX) : URL_PREFIX;
-    document.getElementById("addAppProfesorado").checked = editing ? !!a.profesorado : false;
-    document.getElementById("addAppGestion").checked     = editing ? !!a.gestion : false;
-    document.getElementById("addAppRecursos").checked    = editing ? !!a.recursos : false;
-    document.getElementById("addAppIa").checked          = editing ? !!a.ia : false;
+    // Reset del formulario (en edición/restauración, precargado con los datos de la app)
+    document.getElementById("addAppName").value = a ? (a.name || "") : "";
+    document.getElementById("addAppDesc").value = a ? (a.desc || "") : "";
+    document.getElementById("addAppUrl").value  = a ? (a.url || URL_PREFIX) : URL_PREFIX;
+    document.getElementById("addAppProfesorado").checked = a ? !!a.profesorado : false;
+    document.getElementById("addAppGestion").checked     = a ? !!a.gestion : false;
+    document.getElementById("addAppRecursos").checked    = a ? !!a.recursos : false;
+    document.getElementById("addAppIa").checked          = a ? !!a.ia : false;
     // Checks de acceso del profesorado (excluyentes: uno U otro, o ninguno)
-    document.getElementById("addAppLoginIdeia").checked  = editing ? !!a.loginIdeia : false;
-    document.getElementById("addAppLoginUsu").checked    = editing ? !!a.loginUsu : false;
-    // Por defecto, la nueva app se crea ACTIVA; en edición se respeta su estado
-    const activa = editing ? a.active !== false : true;
+    document.getElementById("addAppLoginIdeia").checked  = a ? !!a.loginIdeia : false;
+    document.getElementById("addAppLoginUsu").checked    = a ? !!a.loginUsu : false;
+    // Por defecto, la nueva app se crea ACTIVA; en edición/restauración se respeta su estado
+    const activa = a ? a.active !== false : true;
     document.getElementById("addAppActive").checked = activa;
     document.getElementById("addAppActiveNote").classList.toggle("hidden", activa);
     document.getElementById("addAppNameWarn").classList.add("hidden");
-    // Título y botón según el modo (alta ↔ edición)
-    document.getElementById("addAppTitle").textContent = editing ? "✏️ Editar aplicación" : "＋ Nueva aplicación";
-    document.getElementById("addAppConfirmBtn").textContent = editing ? "💾 Guardar cambios" : "＋ Añadir aplicación";
+    // Título y botón según el modo (alta ↔ edición ↔ restauración)
+    document.getElementById("addAppTitle").textContent = editing ? "✏️ Editar aplicación"
+                                                       : (a0 ? "♻️ Restaurar aplicación" : "＋ Nueva aplicación");
+    document.getElementById("addAppConfirmBtn").textContent = editing ? "💾 Guardar cambios"
+                                                       : (a0 ? "♻️ Restaurar" : "＋ Añadir aplicación");
     const nameInp = document.getElementById("addAppName");
     nameInp.style.borderColor = "";
     nameInp.style.boxShadow = "";
@@ -1688,12 +1724,76 @@
   function closeAddAppModal() {
     document.getElementById("addAppModal").classList.add("hidden");
     _editAppIndex = -1;  // al cerrar (✕, fondo o Escape) se sale del modo edición
+    _restoreIdx = -1;    // ídem para el modo restauración (Task 19)
   }
 
   // Abre el modal de alta en modo EDICIÓN, precargado con la app i
   function editApp(i) {
     if (i < 0 || i >= apps.length) return;
     showAddAppModal(i);
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  PAPELERA: aplicaciones borradas y su restauración (Task 19)
+  //  Al eliminar una app (✕) se guarda en el nodo deletedApps de Firebase
+  //  con la fecha de borrado; el botón «♻️ Restaurar aplicaciones borradas»
+  //  de Configuración las lista para recuperarlas. La restauración reutiliza
+  //  el modal de alta/edición: si la app no tiene ningún perfil, el propio
+  //  modal exige marcar al menos uno antes de confirmar.
+  // ══════════════════════════════════════════════════════
+
+  function updateRestoreBtnCount() {
+    const btn = document.getElementById("btnRestoreDeleted");
+    if (!btn) return;
+    btn.textContent = deletedApps.length
+      ? `♻️ Restaurar aplicaciones borradas (${deletedApps.length})`
+      : "♻️ Restaurar aplicaciones borradas";
+  }
+
+  function showRestoreModal() {
+    const list = document.getElementById("restoreList");
+    if (!list) return;
+    if (!deletedApps.length) {
+      list.innerHTML = '<p class="restore-empty">No hay aplicaciones borradas. Todo lo que elimines aparecerá aquí y podrá restaurarse.</p>';
+    } else {
+      // Más recientes primero (por fecha de borrado), luego alfabético
+      const orden = deletedApps
+        .map((a, k) => ({ a, k }))
+        .sort((x, y) => {
+          const dx = x.a.deletedAt || "", dy = y.a.deletedAt || "";
+          if (dx !== dy) return dx < dy ? 1 : -1;
+          return (x.a.name || "").localeCompare(y.a.name || "", "es");
+        });
+      list.innerHTML = orden.map(({ a, k }) => {
+        const nombre = a.name && a.name.trim() ? a.name.trim() : "(sin nombre)";
+        const tieneCat = GROUP_KEYS.some(g => !!a[g]);
+        const meta = [];
+        if (a.url) meta.push(escHtml(a.url));
+        if (a.deletedAt) meta.push(`eliminada el ${escHtml(a.deletedAt)}`);
+        const aviso = tieneCat ? "" : '<span class="restore-sincat">⚠ sin categoría: se pedirá asignarle un perfil</span>';
+        const separador = (meta.length && aviso) ? " · " : "";
+        return `
+        <div class="restore-item">
+          <div class="restore-info">
+            <span class="restore-name">${escHtml(nombre)}</span>
+            <span class="restore-meta">${meta.join(" · ")}${separador}${aviso}</span>
+          </div>
+          <button type="button" class="btn btn-gold btn-restore" onclick="ies.restoreApp(${k})">♻️ Restaurar</button>
+        </div>`;
+      }).join("");
+    }
+    document.getElementById("restoreModal").classList.remove("hidden");
+  }
+
+  function closeRestoreModal() {
+    document.getElementById("restoreModal").classList.add("hidden");
+  }
+
+  // Abre el modal de alta en modo RESTAURACIÓN, precargado con la app k de la papelera
+  function restoreApp(k) {
+    if (k < 0 || k >= deletedApps.length) return;
+    closeRestoreModal();
+    showAddAppModal(-1, k);
   }
 
   // Checks de acceso del profesorado EXCLUYENTES: marcar uno desmarca el
@@ -1783,9 +1883,11 @@
     }
 
     const editing = _editAppIndex >= 0 && !!apps[_editAppIndex];
+    // Modo restauración (Task 19): la app viene de la papelera deletedApps
+    const restoring = _restoreIdx >= 0 && !!deletedApps[_restoreIdx];
 
     const MAX_APPS = 200;
-    if (!editing && apps.length >= MAX_APPS) {
+    if (!editing && !restoring && apps.length >= MAX_APPS) {
       closeAddAppModal();
       showToast(`⚠️ Límite de aplicaciones alcanzado (${MAX_APPS}). Elimina algunas antes de añadir más.`, 'err', 5000);
       return;
@@ -1802,6 +1904,15 @@
       a.profesorado = pro; a.gestion = ges; a.recursos = rec; a.ia = ia;
       a.active = activa;
       a.loginIdeia = loginIdeia; a.loginUsu = loginUsu;
+    } else if (restoring) {
+      // Restauración (Task 19): devolver a la lista principal la app guardada
+      // en la papelera. Se parte del objeto original (conserva propiedades
+      // extra) y se le quita la marca de fecha de borrado.
+      const src = deletedApps[_restoreIdx];
+      delete src.deletedAt;
+      Object.assign(src, { name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu });
+      apps.push(src);
+      deletedApps.splice(_restoreIdx, 1);
     } else {
       apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu });
     }
@@ -1812,7 +1923,9 @@
     buildConfigTable();
     closeAddAppModal();
 
-    let msg = editing ? `✓ Cambios guardados en «${name}»` : `✓ Aplicación «${name}» añadida`;
+    let msg = editing ? `✓ Cambios guardados en «${name}»`
+            : restoring ? `✓ Aplicación «${name}» restaurada`
+            : `✓ Aplicación «${name}» añadida`;
     if (!activa) msg += " 🚫 (desactivada: oculta en su perfil)";
     if (similar.length > 0) {
       const exact = similar.find(s => s.isExact);
@@ -1822,19 +1935,50 @@
     }
     showToast(msg, "ok", 3500);
 
-    // Persistir como cualquier otro cambio (tolerante con apps sin categorizar)
-    persistAppsChanges().then(notifyPersistResult);
+    // Persistir como cualquier otro cambio (tolerante con apps sin categorizar).
+    // En restauración, la papelera SOLO se vacía si la escritura de apps tuvo
+    // éxito (así la app nunca puede perderse de ambas listas a la vez).
+    persistAppsChanges().then(res => {
+      notifyPersistResult(res);
+      if (restoring && res && res.ok) {
+        saveDeletedApps().then(ok => {
+          if (!ok) showToast("⚠️ La app se restauró, pero no se pudo vaciar de la papelera en Firebase.", "err", 5000);
+        });
+      }
+    });
   }
 
   window._delApp = function(i) {
     const a = apps[i];
     const label = a && a.name && a.name.trim() ? `«${a.name.trim()}»`
                 : (a && a.url ? `«${a.url}»` : 'la fila vacía');
-    if (!window.confirm(`¿Eliminar la aplicación ${label}? Se quitará de la tabla y el cambio se guardará en la base de datos.`)) return;
+    if (!window.confirm(`¿Eliminar la aplicación ${label}? Se quitará de la lista, quedará guardada en la base de datos (aplicaciones borradas) y podrá restaurarse desde Configuración.`)) return;
     collectTableData();
-    apps.splice(i, 1);
+    const borradas = apps.splice(i, 1);
     buildConfigTable();
-    debouncedAutoSaveApps(); // persistir el borrado como cualquier otra edición (mejora TecDeA)
+    if (borradas[0]) {
+      // Papelera (Task 19): la app se conserva en el nodo deletedApps con la
+      // fecha de borrado, para poder restaurarla más tarde.
+      borradas[0].deletedAt = new Date().toISOString().slice(0, 10);
+      deletedApps.push(borradas[0]);
+      updateRestoreBtnCount();
+      // La app SOLO se retira de la BD si la papelera se guarda con éxito:
+      // si falla, se revierte el borrado en pantalla (no se pierde nada).
+      saveDeletedApps().then(ok => {
+        if (ok) {
+          debouncedAutoSaveApps(); // persistir el borrado como cualquier otra edición (mejora TecDeA)
+        } else {
+          deletedApps.pop();
+          delete borradas[0].deletedAt;
+          apps.splice(Math.min(i, apps.length), 0, borradas[0]);
+          buildConfigTable();
+          updateRestoreBtnCount();
+          showToast("No se pudo mover a «borradas» en Firebase: la app se mantiene en la lista.", "err", 5000);
+        }
+      });
+    } else {
+      debouncedAutoSaveApps(); // fila vacía: persistir igualmente
+    }
   };
 
   // Devuelve array de apps con nombre pero sin ninguna categoría marcada
@@ -3412,6 +3556,8 @@
     renderHome, renderConfig, saveConfig,
     // Alta de aplicaciones vía modal (sustituye al antiguo addAppRow)
     showAddAppModal, closeAddAppModal, confirmAddApp, editApp,
+    // Papelera: restaurar aplicaciones borradas (Task 19)
+    showRestoreModal, closeRestoreModal, restoreApp,
     addAppNameInput, addAppFormChanged,
     addAdminRow, saveAdminsConfig,
     saveGroupPasswordsConfig,
@@ -5292,6 +5438,37 @@
   .tbl-wrap::-webkit-scrollbar { height: 4px; }
   .tbl-wrap::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
 
+  /* ══ Papelera: restaurar aplicaciones borradas (Task 19) ══ */
+  .restore-hint {
+    font-size: .82rem; color: var(--muted);
+    margin: 0 0 .85rem;
+  }
+  .restore-list {
+    display: flex; flex-direction: column; gap: .5rem;
+    max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding-right: .15rem;
+  }
+  .restore-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .55rem .7rem; border: 1px solid #e5e7eb; border-radius: 10px;
+    background: #fafbfd;
+  }
+  .restore-info { display: flex; flex-direction: column; gap: .15rem; min-width: 0; flex: 1; }
+  .restore-name {
+    font-weight: 600; color: var(--text); font-size: .88rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .restore-meta {
+    color: var(--muted); font-size: .74rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .restore-sincat { color: #b45309; font-weight: 600; }
+  .restore-empty {
+    padding: 1rem; text-align: center; color: var(--muted);
+    font-style: italic; font-size: .85rem;
+  }
+  .btn-restore { flex-shrink: 0; white-space: nowrap; }
+
   /* Recuento «Mostrando N de M aplicaciones» sobre la tabla (Task 18) */
   .tbl-meta {
     font-size: .8rem;
@@ -5383,6 +5560,9 @@
       <li>El botón flotante <strong>«Volver»</strong>, a media altura del lateral derecho, te devuelve aquí desde cualquier pantalla.</li>
       <li><strong>Cambio de sesión:</strong> mantén pulsado <strong>⚙ Configuración</strong> ≈1 segundo para volver a bloquear todos los accesos sin reiniciar la app.</li>
       <li><strong>Administradores:</strong> un clic normal en ⚙ pide usuario y contraseña para gestionar aplicaciones, perfiles y contraseñas.</li>
+      <li><strong>Descripción de una app:</strong> con el ratón, al pasar el puntero por el icono se muestra su descripción en un cartel (y, si la app lo indica, el tipo de login del profesorado parpadeando debajo). En móvil o tablet, <strong>mantén pulsado</strong> el icono medio segundo.</li>
+      <li><strong>Editar una app (administradores):</strong> en Configuración, el botón ✎ de cada fila abre el mismo modal que el alta, ya precargado. Ahí puedes marcar «Login del profesorado con usuario IdEA» o «…con usuario / usuario.» (uno, otro o ninguno): el texto marcado se verá parpadeando bajo la descripción en su perfil.</li>
+      <li><strong>¿Borraste una app por error?</strong> Al eliminarla va a la papelera de la base de datos: pulsa «♻️ Restaurar aplicaciones borradas» en Configuración para recuperarla. Si no tenía ningún perfil, al restaurar se te pedirá asignarle al menos uno.</li>
     </ol>
   </div>
 </div>
@@ -5445,7 +5625,7 @@
           Las nuevas aplicaciones se dan de alta con el botón «＋ Añadir aplicación», que abre un modal de confirmación.
           Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
           Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
-          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra). Los filtros son <strong>combinables</strong>: p. ej. «👨‍🏫 Profesorado» + «🚫 Inactivas» muestra solo las apps de ese perfil que estén desactivadas, para revisarlas o volver a activarlas.
+          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra). Los filtros son <strong>combinables</strong>: p. ej. «👨‍🏫 Profesorado» + «🚫 Inactivas» muestra solo las apps de ese perfil que estén desactivadas, para revisarlas o volver a activarlas. 🗑 El botón <strong>✕</strong> elimina la app de la lista, pero se conserva en la base de datos: se restaura con «♻️ Restaurar aplicaciones borradas».
         </p>
         <div class="filter-bar" id="appsFilterBar">
           <span class="filter-label">🔎 Perfil:</span>
@@ -5461,6 +5641,7 @@
           <button class="btn btn-gold" onclick="ies.showAddAppModal()">＋ Añadir aplicación</button>
           <button class="btn btn-ghost" onclick="ies.sortApps('name')">↕ Ordenar por nombre</button>
           <button class="btn btn-ghost" onclick="ies.sortApps('url')">↕ Ordenar por URL</button>
+          <button class="btn btn-ghost" id="btnRestoreDeleted" onclick="ies.showRestoreModal()" title="Recuperar aplicaciones eliminadas de la lista principal (se conservan en la base de datos)">♻️ Restaurar aplicaciones borradas</button>
           <button class="btn btn-primary" onclick="ies.saveConfig()">💾 Guardar aplicaciones</button>
         </div>
         <div class="tbl-meta" id="appsShownTotal" role="status" aria-live="polite"></div>
@@ -5751,6 +5932,18 @@
         <button type="submit" class="btn btn-primary" id="addAppConfirmBtn">＋ Añadir aplicación</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL RESTAURAR APLICACIONES BORRADAS (Task 19) ═══════════ -->
+<div id="restoreModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>♻️ Restaurar aplicaciones borradas</h2>
+    <p class="restore-hint">Estas aplicaciones se quitaron de la lista principal pero se conservan en la base de datos. Pulsa «♻️ Restaurar» para devolver una app a la lista: si no tenía ningún perfil, se te pedirá asignarle al menos uno antes de confirmar.</p>
+    <div id="restoreList" class="restore-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="ies.closeRestoreModal()">Cerrar</button>
+    </div>
   </div>
 </div>
 
