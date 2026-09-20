@@ -1750,7 +1750,9 @@
       : "♻️ Restaurar aplicaciones borradas";
   }
 
-  function showRestoreModal() {
+  // Renderiza el listado de la papelera (al abrir el modal y también tras
+  // restaurar o borrar definitivamente una app, sin necesidad de cerrarlo)
+  function renderRestoreList() {
     const list = document.getElementById("restoreList");
     if (!list) return;
     if (!deletedApps.length) {
@@ -1778,15 +1780,47 @@
             <span class="restore-name">${escHtml(nombre)}</span>
             <span class="restore-meta">${meta.join(" · ")}${separador}${aviso}</span>
           </div>
-          <button type="button" class="btn btn-gold btn-restore" onclick="ies.restoreApp(${k})">♻️ Restaurar</button>
+          <div class="restore-actions">
+            <button type="button" class="btn btn-gold btn-restore" onclick="ies.restoreApp(${k})">♻️ Restaurar</button>
+            <button type="button" class="btn btn-purge" onclick="ies.purgeApp(${k})" title="Borrar definitivamente de la base de datos (irreversible)" aria-label="Borrar definitivamente ${escHtml(nombre)}">🗑</button>
+          </div>
         </div>`;
       }).join("");
     }
+  }
+
+  function showRestoreModal() {
+    renderRestoreList();
     document.getElementById("restoreModal").classList.remove("hidden");
   }
 
   function closeRestoreModal() {
     document.getElementById("restoreModal").classList.add("hidden");
+  }
+
+  // Borrado DEFINITIVO (Task 20): elimina la app de la papelera para siempre,
+  // sacándola también del nodo deletedApps de Firebase. Pide confirmación y,
+  // igual que el borrado suave, SOLO toca la BD si la escritura tiene éxito:
+  // si falla, la app vuelve al listado del modal (no se pierde sin aviso).
+  function purgeApp(k) {
+    if (k < 0 || k >= deletedApps.length) return;
+    const a = deletedApps[k];
+    const label = a && a.name && a.name.trim() ? `«${a.name.trim()}»`
+                : (a && a.url ? `«${a.url}»` : 'la aplicación');
+    if (!window.confirm(`¿Eliminar DEFINITIVAMENTE ${label} de la base de datos? Esta acción es irreversible: no podrás restaurarla más tarde.`)) return;
+    const app = deletedApps.splice(k, 1)[0];
+    renderRestoreList();
+    updateRestoreBtnCount();
+    saveDeletedApps().then(ok => {
+      if (ok) {
+        showToast(`🗑 ${label} eliminada definitivamente.`, "ok", 3500);
+      } else {
+        deletedApps.splice(Math.min(k, deletedApps.length), 0, app);
+        renderRestoreList();
+        updateRestoreBtnCount();
+        showToast("No se pudo eliminar de Firebase: la app sigue en la papelera.", "err", 5000);
+      }
+    });
   }
 
   // Abre el modal de alta en modo RESTAURACIÓN, precargado con la app k de la papelera
@@ -3557,7 +3591,7 @@
     // Alta de aplicaciones vía modal (sustituye al antiguo addAppRow)
     showAddAppModal, closeAddAppModal, confirmAddApp, editApp,
     // Papelera: restaurar aplicaciones borradas (Task 19)
-    showRestoreModal, closeRestoreModal, restoreApp,
+    showRestoreModal, closeRestoreModal, restoreApp, purgeApp,
     addAppNameInput, addAppFormChanged,
     addAdminRow, saveAdminsConfig,
     saveGroupPasswordsConfig,
@@ -5468,6 +5502,14 @@
     font-style: italic; font-size: .85rem;
   }
   .btn-restore { flex-shrink: 0; white-space: nowrap; }
+  .restore-actions { display: flex; gap: .35rem; flex-shrink: 0; }
+
+  /* Task 20: borrado definitivo desde el modal de restauración */
+  .btn-purge {
+    background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;
+    flex-shrink: 0; white-space: nowrap; font-size: .95rem;
+  }
+  .btn-purge:hover { background: #fecaca; color: #7f1d1d; }
 
   /* Recuento «Mostrando N de M aplicaciones» sobre la tabla (Task 18) */
   .tbl-meta {
@@ -5562,7 +5604,7 @@
       <li><strong>Administradores:</strong> un clic normal en ⚙ pide usuario y contraseña para gestionar aplicaciones, perfiles y contraseñas.</li>
       <li><strong>Descripción de una app:</strong> con el ratón, al pasar el puntero por el icono se muestra su descripción en un cartel (y, si la app lo indica, el tipo de login del profesorado parpadeando debajo). En móvil o tablet, <strong>mantén pulsado</strong> el icono medio segundo.</li>
       <li><strong>Editar una app (administradores):</strong> en Configuración, el botón ✎ de cada fila abre el mismo modal que el alta, ya precargado. Ahí puedes marcar «Login del profesorado con usuario IdEA» o «…con usuario / usuario.» (uno, otro o ninguno): el texto marcado se verá parpadeando bajo la descripción en su perfil.</li>
-      <li><strong>¿Borraste una app por error?</strong> Al eliminarla va a la papelera de la base de datos: pulsa «♻️ Restaurar aplicaciones borradas» en Configuración para recuperarla. Si no tenía ningún perfil, al restaurar se te pedirá asignarle al menos uno.</li>
+      <li><strong>¿Borraste una app por error?</strong> Al eliminarla va a la papelera de la base de datos: pulsa «♻️ Restaurar aplicaciones borradas» en Configuración para recuperarla. Si no tenía ningún perfil, al restaurar se te pedirá asignarle al menos uno. Ese mismo listado permite el <strong>borrado definitivo</strong> (botón 🗑): la app desaparece de la base de datos para siempre, tras una confirmación.</li>
     </ol>
   </div>
 </div>
@@ -5625,7 +5667,7 @@
           Las nuevas aplicaciones se dan de alta con el botón «＋ Añadir aplicación», que abre un modal de confirmación.
           Para apps del IES, escribe solo la ruta (p. ej. <code>mmo</code>); el prefijo <code>https://iesvilladiego.github.io/</code> se añade automáticamente.
           Para una URL externa, pega la dirección completa empezando por <code>https://</code> y la celda cambiará sola al modo externo.
-          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra). Los filtros son <strong>combinables</strong>: p. ej. «👨‍🏫 Profesorado» + «🚫 Inactivas» muestra solo las apps de ese perfil que estén desactivadas, para revisarlas o volver a activarlas. 🗑 El botón <strong>✕</strong> elimina la app de la lista, pero se conserva en la base de datos: se restaura con «♻️ Restaurar aplicaciones borradas».
+          👁 La casilla <strong>Act.</strong> controla si la app se muestra en su perfil: desmárcala para <strong>desactivarla</strong> (queda atenuada, NO se borra). Los filtros son <strong>combinables</strong>: p. ej. «👨‍🏫 Profesorado» + «🚫 Inactivas» muestra solo las apps de ese perfil que estén desactivadas, para revisarlas o volver a activarlas. 🗑 El botón <strong>✕</strong> elimina la app de la lista, pero se conserva en la base de datos: se restaura con «♻️ Restaurar aplicaciones borradas», listado desde el que también puede borrarse definitivamente con 🗑.
         </p>
         <div class="filter-bar" id="appsFilterBar">
           <span class="filter-label">🔎 Perfil:</span>
@@ -5939,7 +5981,7 @@
 <div id="restoreModal" class="modal-bg hidden">
   <div class="modal">
     <h2>♻️ Restaurar aplicaciones borradas</h2>
-    <p class="restore-hint">Estas aplicaciones se quitaron de la lista principal pero se conservan en la base de datos. Pulsa «♻️ Restaurar» para devolver una app a la lista: si no tenía ningún perfil, se te pedirá asignarle al menos uno antes de confirmar.</p>
+    <p class="restore-hint">Estas aplicaciones se quitaron de la lista principal pero se conservan en la base de datos. Pulsa «♻️ Restaurar» para devolver una app a la lista: si no tenía ningún perfil, se te pedirá asignarle al menos uno antes de confirmar. El botón «🗑» la elimina <strong>definitivamente</strong> de la base de datos: acción irreversible que pide confirmación.</p>
     <div id="restoreList" class="restore-list"></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="ies.closeRestoreModal()">Cerrar</button>
