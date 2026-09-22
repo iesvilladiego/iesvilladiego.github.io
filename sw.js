@@ -5,10 +5,12 @@
    - Network-first para documentos HTML (siempre la versión más reciente online)
    - NO intercepta las llamadas a Firebase Realtime Database
      (esos datos se cargan en tiempo real, no se cachean)
+   - NO intercepta las rutas de otras PWAs alojadas en el mismo origen
+     (p. ej. /perfilcompetencialv2/): cada app la gestiona su propio SW
    - Si offline y el HTML no está cacheado, sirve la versión cacheada
 ╔═════════════════════════════════════════════════════════════════*/
 
-const CACHE_VERSION = 'portal-ies-v31';
+const CACHE_VERSION = 'portal-ies-v32';
 const CACHE_NAME = CACHE_VERSION;
 
 // Recursos estáticos que se cachean al instalar la PWA
@@ -68,7 +70,10 @@ self.addEventListener('activate', (event) => {
       .then((keys) => {
         return Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            // IMPORTANTE: solo borrar cachés de versiones anteriores de ESTA app.
+            // Nunca tocar cachés de otras PWAs del mismo origen
+            // (Cache Storage es compartido por origen).
+            .filter((key) => key !== CACHE_NAME && key.startsWith('portal-ies-'))
             .map((key) => {
               console.log('[SW] Eliminando caché antigua:', key);
               return caches.delete(key);
@@ -90,6 +95,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (BYPASS_DOMAINS.some((d) => url.hostname.includes(d))) {
     return; // Dejar que Firebase gestione sus propias peticiones
+  }
+
+  // Ignorar las rutas de otras PWAs del mismo origen (p. ej. Perfil Competencial).
+  // Sin esto, si el usuario navega a /perfilcompetencialv2/ antes de que su propio
+  // SW tome el control (o estando offline), este SW serviría el HTML del portal
+  // y Chrome instalaría/actualizaría el portal en lugar de la otra app.
+  if (url.origin === location.origin && url.pathname.startsWith('/perfilcompetencialv2')) {
+    return;
   }
 
   // Ignorar extensiones de Chrome y otras
