@@ -181,7 +181,7 @@
   // ── Estado global ──────────────────────────────────────
   let apps      = [];
   let deletedApps = [];          // Papelera: apps quitadas de la lista, restaurables (Task 19)
-  let admins    = [{ user: "admin", pass: "admin" }];           // Multi-administrador
+  let admins    = [];            // Multi-administrador (solo vive en Firebase, NUNCA en el código)
   let groupPasswords = { profesorado: "", gestion: "", recursos: "", ia: "" };
   let pendingGroup = null;   // Grupo pendiente de validar contraseña
   let appsFilter = 'all';        // Filtro de PERFIL en Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
@@ -275,13 +275,16 @@
       const snap = results[3].value;
       if (snap.exists()) {
         const a = snap.val();
-        admins = [{ user: a.user || "admin", pass: a.pass || "admin" }];
+        // Solo se admite si la contraseña venía en la base de datos; no se
+        // inventa ninguna por defecto en el código.
+        if (a && a.user && a.pass) admins = [{ user: a.user, pass: a.pass }];
       }
     } else if (admins.length === 0 && results[3].status === "rejected") {
       console.warn("No se pudo cargar 'admin' (legacy) desde Firebase:", results[3].reason);
     }
-    // Garantía final: siempre al menos un admin por defecto
-    if (admins.length === 0) admins = [{ user: "admin", pass: "admin" }];
+    // Si al final no hay ningún administrador en la base de datos, la app
+    // mostrará el modal de primer arranque para crear el primero
+    // (showSetupModal). Nunca se crea uno por defecto desde el código.
 
     // Contraseñas por perfil
     if (results[2].status === "fulfilled") {
@@ -323,6 +326,11 @@
         "err", 7000
       );
     }
+
+    // Primer arranque: si la base de datos no tiene ningún administrador,
+    // pedir su creación (usuario + contraseña dos veces). Sin contraseñas
+    // por defecto en el código.
+    if (admins.length === 0) showSetupModal();
   }
 
   // ── Persistencia ──────────────────────────────────────
@@ -986,6 +994,12 @@
       return;
     }
 
+    // Sin administradores en la base de datos → alta inicial (primer arranque)
+    if (admins.length === 0) {
+      showSetupModal();
+      return;
+    }
+
     document.getElementById("loginError").textContent = "";
     document.getElementById("loginUser").value = "";
     document.getElementById("loginPass").value = "";
@@ -1007,6 +1021,10 @@
   }
 
   function doLogin() {
+    if (admins.length === 0) {
+      document.getElementById("loginError").textContent = "No hay administradores configurados. Crea primero el administrador inicial.";
+      return;
+    }
     const u = document.getElementById("loginUser").value.trim();
     const p = document.getElementById("loginPass").value;
     const found = admins.find(a => a.user === u && a.pass === p);
@@ -2067,13 +2085,17 @@
   }
 
   // ── Gestión de administradores (CRUD multi-admin) ─────
+  // Las contraseñas NO se muestran ni se editan en la tabla: se gestionan
+  // exclusivamente con el modal «Cambiar contraseña» (doble introducción).
   function buildAdminsTable() {
     const tbody = document.querySelector("#adminsTable tbody");
     tbody.innerHTML = admins.map((a, i) => `
       <tr data-i="${i}">
         <td data-label="Usuario"><input type="text" class="fi" value="${escHtml(a.user)}" placeholder="usuario" data-af="user" autocomplete="off"></td>
-        <td data-label="Contraseña"><input type="text" class="fi" value="${escHtml(a.pass)}" placeholder="contraseña" data-af="pass" autocomplete="new-password"></td>
-        <td data-label="" class="chk"><button class="btn-del" onclick="window._delAdmin(${i})" title="Eliminar">✕</button></td>
+        <td data-label="Acciones" class="chk">
+          <button type="button" class="btn-del" onclick="ies.showChangePassModal(${i})" title="Cambiar contraseña" style="font-size:1rem">🔑</button>
+          <button class="btn-del" onclick="window._delAdmin(${i})" title="Eliminar">✕</button>
+        </td>
       </tr>`).join("");
 
     tbody.querySelectorAll("input").forEach(inp => {
@@ -2126,6 +2148,11 @@
     collectAdminsData();
     admins.push({ user: "", pass: "" });
     buildAdminsTable();
+    // Foco en el campo usuario de la fila nueva; la contraseña se asigna
+    // después con el botón 🔑 (doble introducción).
+    const rows = document.querySelectorAll("#adminsTable tbody tr");
+    const last = rows[rows.length - 1];
+    last?.querySelector("input")?.focus();
   }
 
   window._delAdmin = function(i) {
@@ -2147,6 +2174,10 @@
     const cleaned = admins.filter(a => a.user && a.pass);
     if (cleaned.length === 0) {
       showToast("Debe existir al menos un administrador con usuario y contraseña.", "err", 5000);
+      return;
+    }
+    if (cleaned.length !== admins.length) {
+      showToast("Hay administradores sin contraseña. Usa el botón 🔑 de su fila para asignársela.", "err", 6000);
       return;
     }
     const users = cleaned.map(a => a.user);
@@ -2171,6 +2202,115 @@
     }
     showToast(`Administradores guardados en base de datos Firebase (${admins.length}).`, "ok", 4500);
     buildAdminsTable();
+  }
+
+  // ── Modal «Cambiar contraseña» de un administrador ────
+  // Única vía para establecer o cambiar contraseñas de administrador:
+  // pide la contraseña actual (si la hay) y la nueva DOS veces.
+  function showChangePassModal(i) {
+    const admin = admins[i];
+    if (!admin) return;
+    const modal = document.getElementById("changePassModal");
+    document.getElementById("cpUser").value = admin.user || "";
+    document.getElementById("cpCurrent").value = "";
+    document.getElementById("cpNew").value = "";
+    document.getElementById("cpNew2").value = "";
+    document.getElementById("cpError").textContent = "";
+    syncCpCurrentVisibility();
+    modal.classList.remove("hidden");
+    // Si ya tiene contraseña, foco en «actual»; si no, en «nueva»
+    setTimeout(() => {
+      (admin.pass ? document.getElementById("cpCurrent") : document.getElementById("cpNew")).focus();
+    }, 50);
+  }
+
+  function closeChangePassModal() {
+    document.getElementById("changePassModal").classList.add("hidden");
+  }
+
+  function syncCpCurrentVisibility() {
+    const admin = admins.find(a => a.user === document.getElementById("cpUser").value);
+    const wrap = document.getElementById("cpCurrentWrap");
+    const hint = document.getElementById("cpCurrentHint");
+    if (admin && admin.pass) {
+      wrap.classList.remove("hidden");
+      hint.classList.add("hidden");
+    } else {
+      wrap.classList.add("hidden");
+      hint.classList.remove("hidden");
+    }
+  }
+
+  async function doChangePassword() {
+    const errEl = document.getElementById("cpError");
+    const fail = msg => { errEl.textContent = msg; };
+
+    const user  = document.getElementById("cpUser").value;
+    const idx   = admins.findIndex(a => a.user === user);
+    if (idx === -1) return fail("Selecciona un administrador válido.");
+    const admin = admins[idx];
+
+    const cur = document.getElementById("cpCurrent").value;
+    const n1  = document.getElementById("cpNew").value;
+    const n2  = document.getElementById("cpNew2").value;
+
+    if (admin.pass && cur !== admin.pass) return fail("La contraseña actual no es correcta.");
+    if (!n1)              return fail("La nueva contraseña no puede estar vacía.");
+    if (n1.length < 4)    return fail("La nueva contraseña debe tener al menos 4 caracteres.");
+    if (n1 !== n2)        return fail("Las dos contraseñas nuevas no coinciden.");
+
+    const oldPass = admin.pass;
+    admin.pass = n1;
+    const ok = await saveAdmins();
+    if (!ok) {
+      admin.pass = oldPass; // revertir si Firebase rechaza la escritura
+      return fail("Error al guardar en Firebase. Revisa las reglas de seguridad e inténtalo de nuevo.");
+    }
+    closeChangePassModal();
+    showToast(`✓ Contraseña de «${admin.user || "administrador"}» actualizada.`, "ok", 4000);
+  }
+
+  // ── Primer arranque: crear el administrador inicial ───
+  // Se muestra solo cuando la base de datos no contiene ningún administrador.
+  // Sustituye a la antigua contraseña por defecto del código (eliminada).
+  function showSetupModal() {
+    document.getElementById("suUser").value = "";
+    document.getElementById("suPass").value = "";
+    document.getElementById("suPass2").value = "";
+    document.getElementById("suError").textContent = "";
+    document.getElementById("setupModal").classList.remove("hidden");
+    setTimeout(() => document.getElementById("suUser").focus(), 50);
+  }
+
+  function closeSetupModal() {
+    document.getElementById("setupModal").classList.add("hidden");
+  }
+
+  async function doSetupAdmin() {
+    const errEl = document.getElementById("suError");
+    const fail = msg => { errEl.textContent = msg; };
+
+    if (admins.length > 0) { closeSetupModal(); return; } // ya hay administrador
+
+    const u  = document.getElementById("suUser").value.trim();
+    const p1 = document.getElementById("suPass").value;
+    const p2 = document.getElementById("suPass2").value;
+
+    if (!u)            return fail("El nombre de usuario no puede estar vacío.");
+    if (!p1)           return fail("La contraseña no puede estar vacía.");
+    if (p1.length < 4) return fail("La contraseña debe tener al menos 4 caracteres.");
+    if (p1 !== p2)     return fail("Las dos contraseñas no coinciden.");
+
+    admins = [{ user: u, pass: p1 }];
+    const ok = await saveAdmins();
+    if (!ok) {
+      admins = []; // revertir si Firebase rechaza la escritura
+      return fail("Error al guardar en Firebase. Revisa las reglas de seguridad e inténtalo de nuevo.");
+    }
+    closeSetupModal();
+    unlockedInSession.add("admin");   // quien la crea queda identificado
+    renderConfig();
+    showToast("✓ Administrador creado. Ya puedes usar Configuración.", "ok", 4500);
   }
 
   // ── Contraseñas de grupos ─────────────────────────────
@@ -3594,6 +3734,8 @@
     showRestoreModal, closeRestoreModal, restoreApp, purgeApp,
     addAppNameInput, addAppFormChanged,
     addAdminRow, saveAdminsConfig,
+    showChangePassModal, closeChangePassModal, doChangePassword, syncCpCurrentVisibility,
+    showSetupModal, closeSetupModal, doSetupAdmin,
     saveGroupPasswordsConfig,
     hideDescModal, iconFallback,
     sortApps, setAppsFilter,
@@ -5748,6 +5890,11 @@
       </button>
       <div class="acc-content">
         <p class="hint">Gestiona los usuarios con permiso para acceder a esta pantalla de Configuración. Debe existir al menos uno; no se permiten usuarios duplicados.</p>
+        <p class="hint">
+          🔑 Para establecer o cambiar la contraseña de un administrador, pulsa el botón <strong>🔑</strong> de su fila:
+          tendrás que escribir la contraseña nueva <strong>dos veces</strong> para confirmarla. Las contraseñas no se
+          muestran en la tabla ni están guardadas en el código de la aplicación: viven únicamente en la base de datos.
+        </p>
         <p class="hint hint-warning">
           🔒 <strong>Nota importante:</strong> Las contraseñas de los administradores se incluirán en la exportación a Excel/PDF. Asegúrate de proteger el archivo exportado.
         </p>
@@ -5760,8 +5907,7 @@
             <thead>
               <tr>
                 <th>Usuario</th>
-                <th>Contraseña</th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -5874,7 +6020,7 @@
     <h2>🔐 Acceso a Configuración</h2>
     <form onsubmit="event.preventDefault(); ies.doLogin()" autocomplete="on">
       <div class="fi-label">Usuario</div>
-      <input type="text"     id="loginUser" class="fi" placeholder="admin" autocomplete="username"
+      <input type="text"     id="loginUser" class="fi" placeholder="usuario" autocomplete="username"
              onkeydown="if(event.key==='Enter') document.getElementById('loginPass').focus()">
       <div class="fi-label" style="margin-top:.5rem">Contraseña</div>
       <input type="password" id="loginPass" class="fi" placeholder="••••••" autocomplete="current-password"
@@ -5883,6 +6029,58 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" onclick="ies.closeLoginModal()">Cancelar</button>
         <button type="submit" class="btn btn-primary">Entrar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CAMBIAR CONTRASEÑA ADMINISTRADOR ══════ -->
+<div id="changePassModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>🔑 Cambiar contraseña</h2>
+    <form onsubmit="event.preventDefault(); ies.doChangePassword()" autocomplete="off">
+      <div class="fi-label">Administrador</div>
+      <input type="text" id="cpUser" class="fi" readonly style="background:#f0f4ff">
+      <div id="cpCurrentWrap">
+        <div class="fi-label" style="margin-top:.5rem">Contraseña actual</div>
+        <input type="password" id="cpCurrent" class="fi" placeholder="••••••" autocomplete="current-password"
+               onkeydown="if(event.key==='Enter') document.getElementById('cpNew').focus()">
+      </div>
+      <div id="cpCurrentHint" class="hint hidden">Este administrador todavía no tiene contraseña asignada.</div>
+      <div class="fi-label" style="margin-top:.5rem">Contraseña nueva</div>
+      <input type="password" id="cpNew" class="fi" placeholder="••••••" autocomplete="new-password"
+             onkeydown="if(event.key==='Enter') document.getElementById('cpNew2').focus()">
+      <div class="fi-label" style="margin-top:.5rem">Repite la contraseña nueva</div>
+      <input type="password" id="cpNew2" class="fi" placeholder="••••••" autocomplete="new-password"
+             onkeydown="if(event.key==='Enter') ies.doChangePassword()">
+      <div id="cpError" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="ies.closeChangePassModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar contraseña</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL PRIMER ARRANQUE: CREAR ADMINISTRADOR ══ -->
+<div id="setupModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>🛠️ Crear administrador inicial</h2>
+    <p class="hint">Esta base de datos todavía no tiene ningún administrador. Crea el primero para poder acceder a Configuración.</p>
+    <form onsubmit="event.preventDefault(); ies.doSetupAdmin()" autocomplete="off">
+      <div class="fi-label">Usuario</div>
+      <input type="text" id="suUser" class="fi" placeholder="p. ej. direccion" autocomplete="username"
+             onkeydown="if(event.key==='Enter') document.getElementById('suPass').focus()">
+      <div class="fi-label" style="margin-top:.5rem">Contraseña</div>
+      <input type="password" id="suPass" class="fi" placeholder="••••••" autocomplete="new-password"
+             onkeydown="if(event.key==='Enter') document.getElementById('suPass2').focus()">
+      <div class="fi-label" style="margin-top:.5rem">Repite la contraseña</div>
+      <input type="password" id="suPass2" class="fi" placeholder="••••••" autocomplete="new-password"
+             onkeydown="if(event.key==='Enter') ies.doSetupAdmin()">
+      <div id="suError" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onclick="ies.closeSetupModal()">Más tarde</button>
+        <button type="submit" class="btn btn-primary">Crear administrador</button>
       </div>
     </form>
   </div>
