@@ -3872,14 +3872,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* Versión del Service Worker (cabecera, bajo el subtítulo) */
+  /* Versión del Service Worker (cabecera, junto al subtítulo) */
   header .sw-version {
-    font-size: .62rem;
-    color: var(--gold2);
-    opacity: .7;
-    margin-top: 1px;
+    display: inline-block;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--navy);
+    background: var(--gold2);
+    padding: 0 .45rem;
+    border-radius: 7px;
+    margin-left: .4rem;
     letter-spacing: .02em;
     white-space: nowrap;
+    vertical-align: 1px;
   }
   /* El bloque de marca puede encoger (min-width:0): permite que el h1
      aplique su ellipsis en pantallas estrechas en vez de desbordar */
@@ -5666,9 +5671,10 @@
 <header>
   <div class="header-brand">
     <h1>IES Virgen de Villadiego</h1>
-    <div class="subtitle">Portal de aplicaciones</div>
-    <!-- Versión del Service Worker activa (la pide la página al SW al cargar) -->
-    <div id="swVersion" class="sw-version" hidden></div>
+    <div class="subtitle">Portal de aplicaciones
+      <!-- Versión del Service Worker activa (la pide la página al SW al cargar) -->
+      <span id="swVersion" class="sw-version" hidden></span>
+    </div>
   </div>
   <div class="header-actions">
     <button class="btn-about" type="button" aria-label="Información sobre esta aplicación"
