@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
 <!-- ═══════ TEMA Y COLORES ═══════ -->
-<meta name="theme-color" content="#0b2545" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b2545" media="(prefers-color-scheme: dark)">
-<meta name="msapplication-navbutton-color" content="#0b2545">
+<meta name="theme-color" content="#2e3f52" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2e3f52" media="(prefers-color-scheme: dark)">
+<meta name="msapplication-navbutton-color" content="#2e3f52">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Portal IES">
@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" sizes="167x167" href="img/icon-144x144.png">
 <link rel="apple-touch-icon" sizes="180x180" href="img/apple-touch-icon.png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-<link rel="mask-icon" href="img/icon-512x512-maskable.png" color="#0b2545">
-<meta name="msapplication-TileColor" content="#0b2545">
+<link rel="mask-icon" href="img/icon-512x512-maskable.png" color="#2e3f52">
+<meta name="msapplication-TileColor" content="#2e3f52">
 <meta name="msapplication-TileImage" content="img/icon-144x144.png">
 <meta name="msapplication-config" content="browserconfig.xml">
 
@@ -3772,16 +3772,16 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --navy:   #0b2545;
-    --gold:   #c8a84b;
-    --gold2:  #e8c96a;
-    --cream:  #f7f4ef;
+    --navy:   #2e3f52;
+    --gold:   #b3a336;
+    --gold2:  #e2d566;
+    --cream:  #f3f1e7;
     --white:  #ffffff;
-    --text:   #1a1a2e;
+    --text:   #26303d;
     --muted:  #6b7280;
     --danger: #c0392b;
     --radius: 14px;
-    --shadow: 0 4px 24px rgba(11,37,69,.15);
+    --shadow: 0 4px 24px rgba(46,63,82,.15);
     --safe-top:    env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left:   env(safe-area-inset-left, 0px);
@@ -4118,7 +4118,7 @@
   }
   .main-btn:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 32px rgba(11,37,69,.25);
+    box-shadow: 0 8px 32px rgba(46,63,82,.25);
   }
   .main-btn:active { transform: translateY(0) scale(.97); }
 
@@ -4147,7 +4147,7 @@
     font-size: .88rem; font-weight: 600;
     padding: .6rem 1.1rem .6rem .9rem;
     border-radius: 25px;
-    box-shadow: 0 4px 16px rgba(11,37,69,.35), 0 2px 6px rgba(0,0,0,.15);
+    box-shadow: 0 4px 16px rgba(46,63,82,.35), 0 2px 6px rgba(0,0,0,.15);
     transition: transform .18s, box-shadow .18s, background .18s, color .18s, opacity .2s;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
@@ -4158,8 +4158,8 @@
     -webkit-user-select: none;
 
     /* Asegurar visibilidad */
-    background: linear-gradient(135deg, #0b2545 0%, #1a3a5c 100%);
-    border: 1.5px solid rgba(200,168,75,.4);
+    background: linear-gradient(135deg, #2e3f52 0%, #46586e 100%);
+    border: 1.5px solid rgba(179,163,54,.4);
 
     opacity: 0.95;
     animation: backBtnSlideIn .3s ease-out;
@@ -4193,16 +4193,16 @@
   @media (min-width: 768px) {
     .back-btn {
       box-shadow:
-        0 0 0 1px rgba(200,168,75,.3),
-        0 6px 24px rgba(11,37,69,.45),
+        0 0 0 1px rgba(179,163,54,.3),
+        0 6px 24px rgba(46,63,82,.45),
         0 3px 12px rgba(0,0,0,.2);
     }
 
     .back-btn:hover {
       transform: translateY(calc(-50% - 2px)) scale(1.05);
       box-shadow:
-        0 0 0 1px rgba(200,168,75,.6),
-        0 8px 32px rgba(200,168,75,.4),
+        0 0 0 1px rgba(179,163,54,.6),
+        0 8px 32px rgba(179,163,54,.4),
         0 4px 16px rgba(0,0,0,.25);
     }
 
@@ -4291,7 +4291,7 @@
   }
   .app-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 28px rgba(11,37,69,.18);
+    box-shadow: 0 8px 28px rgba(46,63,82,.18);
     border-color: var(--gold);
   }
   .app-card:active { transform: scale(.96); }
@@ -4394,10 +4394,10 @@
     transition: background .18s ease;
   }
   .acc-header:hover {
-    background: #143869;
+    background: #3c4f63;
   }
   .acc-header:active {
-    background: #1a4276;
+    background: #46586e;
   }
   .accordion.open .acc-header {
     border-bottom: 2px solid var(--gold);
@@ -4481,7 +4481,7 @@
     vertical-align: middle;
   }
   table#appsTable tr:hover td,
-  table#adminsTable tr:hover td { background: #f0f4ff; }
+  table#adminsTable tr:hover td { background: #f4f2e2; }
 
   /* ══ Filas alternadas (zebra striping) para mejor legibilidad ═══ */
   table#appsTable tbody tr.row-even td {
@@ -4489,24 +4489,24 @@
     border-bottom: 1px solid #e5e7eb;
   }
   table#appsTable tbody tr.row-odd td {
-    background: linear-gradient(to right, #e2e8f0 0%, #cbd5e1 50%, #e2e8f0 100%);
+    background: linear-gradient(to right, #e9e7d8 0%, #d9d6c0 50%, #e9e7d8 100%);
     border-bottom: 1px solid #94a3b8;
   }
   /* Efecto hover que funciona sobre las filas alternadas */
   table#appsTable tbody tr.row-even:hover td,
   table#appsTable tbody tr.row-odd:hover td {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    border-bottom-color: #93c5fd;
+    background: linear-gradient(135deg, #f5f3e0 0%, #e9e5c9 100%);
+    border-bottom-color: #c9bd6e;
   }
   /* En móvil (tarjetas), las filas alternadas se aplican al tr completo */
   @media (max-width: 767px) {
     table#appsTable tr.row-even { background: var(--white); }
     table#appsTable tr.row-odd {
-      background: linear-gradient(to right, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+      background: linear-gradient(to right, #f8f7ef 0%, #f0efe3 50%, #f8f7ef 100%);
     }
     table#appsTable tr.row-even:hover,
     table#appsTable tr.row-odd:hover {
-      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+      background: linear-gradient(135deg, #f5f3e0 0%, #e9e5c9 100%) !important;
     }
   }
 
@@ -4581,7 +4581,7 @@
     appearance: none;
     font-family: inherit;
   }
-  .fi:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(11,37,69,.15); }
+  .fi:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(46,63,82,.15); }
   .url-fi { min-width: 180px; }
 
   /* ── Input de URL con prefijo fijo ── */
@@ -4598,7 +4598,7 @@
   }
   .url-input-group:focus-within {
     border-color: var(--navy);
-    box-shadow: 0 0 0 2px rgba(11,37,69,.15);
+    box-shadow: 0 0 0 2px rgba(46,63,82,.15);
   }
   .url-prefix {
     background: #f3f4f6;
@@ -4663,7 +4663,7 @@
     border-radius: 8px;
     -webkit-tap-highlight-color: transparent;
   }
-  .btn-edit:hover { transform: scale(1.3); background: rgba(11,37,69,.08); }
+  .btn-edit:hover { transform: scale(1.3); background: rgba(46,63,82,.08); }
   .btn-edit:active { transform: scale(1.1); }
 
   .desc-cell { min-width: 160px; }
@@ -4672,7 +4672,7 @@
   .desc-modal-box {
     background: var(--white);
     color: var(--text);
-    border: 1px solid rgba(11,37,69,.12);
+    border: 1px solid rgba(46,63,82,.12);
     border-left: 4px solid var(--gold);
     border-radius: 12px;
     padding: 0 1.1rem .85rem;
@@ -4695,7 +4695,7 @@
     letter-spacing: .07em;
     padding: .55rem 0 .4rem;
     margin-bottom: .45rem;
-    border-bottom: 1px solid rgba(11,37,69,.08);
+    border-bottom: 1px solid rgba(46,63,82,.08);
   }
   @keyframes descFadeIn {
     from { opacity: 0; transform: translateY(-4px) scale(.98); }
@@ -4706,7 +4706,7 @@
   .desc-modal-login {
     margin-top: .55rem;
     padding-top: .5rem;
-    border-top: 1px dashed rgba(11,37,69,.18);
+    border-top: 1px dashed rgba(46,63,82,.18);
     font-size: .8rem;
     font-weight: 800;
     color: #c0392b;
@@ -4734,7 +4734,7 @@
     gap: .5rem;
     margin: .9rem 0 1.1rem;
     padding: .65rem .8rem;
-    background: linear-gradient(to right, #f5f7fb, #eef2f8);
+    background: linear-gradient(to right, #f6f5ea, #ecebdc);
     border-radius: 12px;
     border: 1px solid #e5e7eb;
   }
@@ -4771,24 +4771,24 @@
   }
   .filter-btn:hover {
     border-color: var(--navy);
-    background: #f0f4ff;
+    background: #f4f2e2;
     transform: translateY(-1px);
   }
   .filter-btn.active {
     background: var(--navy);
     color: var(--white);
     border-color: var(--navy);
-    box-shadow: 0 3px 12px rgba(11,37,69,.25);
+    box-shadow: 0 3px 12px rgba(46,63,82,.25);
   }
   .filter-btn.active:hover {
     background: var(--gold);
     color: var(--navy);
     border-color: var(--gold);
-    box-shadow: 0 4px 14px rgba(200,168,75,.4);
+    box-shadow: 0 4px 14px rgba(179,163,54,.4);
   }
   /* Contador de apps por botón de filtro (badge pequeño) */
   .filter-count {
-    background: rgba(11,37,69,.09);
+    background: rgba(46,63,82,.09);
     color: var(--navy);
     border-radius: 10px;
     font-size: .68rem;
@@ -4804,7 +4804,7 @@
     color: #fff;
   }
   .filter-btn.active:hover .filter-count {
-    background: rgba(11,37,69,.15);
+    background: rgba(46,63,82,.15);
     color: var(--navy);
   }
 
@@ -4815,7 +4815,7 @@
     gap: 1.2rem;
     margin: .5rem 0 1rem;
     padding: 1rem;
-    background: #f5f7fb;
+    background: #f6f5ea;
     border-radius: 10px;
     border: 1px solid #e5e7eb;
   }
@@ -4973,7 +4973,7 @@
   /* ══ Importación de aplicaciones ════ */
   .import-zone {
     padding: 1rem;
-    background: #f5f7fb;
+    background: #f6f5ea;
     border-radius: 10px;
     border: 1px solid #e5e7eb;
   }
@@ -5190,7 +5190,7 @@
   /* ══ Modales (login + grupo) ═══════════════════════ */
   .modal-bg {
     position: fixed; inset: 0;
-    background: rgba(11,37,69,.55);
+    background: rgba(46,63,82,.55);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
@@ -5996,7 +5996,7 @@
     <h2>🔑 Cambiar contraseña</h2>
     <form onsubmit="event.preventDefault(); ies.doChangePassword()" autocomplete="off">
       <div class="fi-label">Administrador</div>
-      <input type="text" id="cpUser" class="fi" readonly style="background:#f0f4ff">
+      <input type="text" id="cpUser" class="fi" readonly style="background:#f4f2e2">
       <div id="cpCurrentWrap">
         <div class="fi-label" style="margin-top:.5rem">Contraseña actual</div>
         <input type="password" id="cpCurrent" class="fi" placeholder="••••••" autocomplete="current-password"
