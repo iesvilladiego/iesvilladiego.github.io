@@ -3745,7 +3745,9 @@
     filterExportAppList, updateExportSelCount, toggleExportCat,
     // Importación masiva de aplicaciones
     onImportFileSelected, analyzeImportFile, closeImportModal,
-    confirmImport, updateImportConfirmBtn
+    confirmImport, updateImportConfirmBtn,
+    // Toast de avisos (lo usa también el registro del Service Worker)
+    showToast
   };
 
   // ── Arranque ──────────────────────────────────────────
@@ -3869,6 +3871,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* Versión del Service Worker (cabecera, bajo el subtítulo) */
+  header .sw-version {
+    font-size: .62rem;
+    color: var(--gold2);
+    opacity: .7;
+    margin-top: 1px;
+    letter-spacing: .02em;
+    white-space: nowrap;
   }
   /* El bloque de marca puede encoger (min-width:0): permite que el h1
      aplique su ellipsis en pantallas estrechas en vez de desbordar */
@@ -5656,6 +5667,8 @@
   <div class="header-brand">
     <h1>IES Virgen de Villadiego</h1>
     <div class="subtitle">Portal de aplicaciones</div>
+    <!-- Versión del Service Worker activa (la pide la página al SW al cargar) -->
+    <div id="swVersion" class="sw-version" hidden></div>
   </div>
   <div class="header-actions">
     <button class="btn-about" type="button" aria-label="Información sobre esta aplicación"
@@ -6168,9 +6181,47 @@
     // Sólo registrar en producción (https o localhost)
     if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
+    const versionEl = document.getElementById('swVersion');
+
+    // 'portal-ies-v32' → 'v32' para mostrar sólo la etiqueta corta
+    function shortVersion(v) {
+      return String(v).replace(/^portal-ies-/i, '');
+    }
+
+    function displayVersion(v) {
+      if (!versionEl || !v) return;
+      versionEl.textContent = shortVersion(v);
+      versionEl.hidden = false;
+    }
+
+    function requestVersion() {
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' });
+      }
+    }
+
+    // Respuestas del SW (versión activa) y aviso si la versión cambia
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || data.type !== 'VERSION') return;
+      // Si ya se había mostrado otra versión, la app se acaba de actualizar
+      if (window._swShownVersion && window._swShownVersion !== data.version) {
+        if (window.ies && typeof window.ies.showToast === 'function') {
+          window.ies.showToast(
+            `✓ Aplicación actualizada a la versión ${shortVersion(data.version)}.`,
+            "ok", 5000
+          );
+        }
+      }
+      window._swShownVersion = data.version;
+      displayVersion(data.version);
+    });
+
     navigator.serviceWorker.register('sw.js', { scope: './' })
       .then((reg) => {
         console.log('[PWA] Service Worker registrado con scope:', reg.scope);
+        // Mostrar la versión del SW activo en la cabecera
+        requestVersion();
 
         // Detectar actualizaciones del SW y avisar al usuario
         reg.addEventListener('updatefound', () => {
@@ -6178,12 +6229,14 @@
           if (!newWorker) return;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Hay una nueva versión disponible
+              // Hay una nueva versión instalada a la espera: avisar al usuario
               console.log('[PWA] Nueva versión disponible. Recarga para aplicar.');
               if (window.ies && typeof window.ies.showToast === 'function') {
-                // No existe todavía showToast en window.ies, pero por si acaso
+                window.ies.showToast(
+                  '🔄 Hay una nueva versión de la aplicación. Recarga la página para actualizarla.',
+                  "ok", 8000
+                );
               }
-              // Mostrar aviso sutil en consola; el usuario puede recargar
             }
           });
         });
@@ -6192,16 +6245,12 @@
         console.warn('[PWA] Error al registrar el Service Worker:', err);
       });
 
-    // Si el SW ha tomado el control y hay una nueva versión, recargar una vez
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // Evitar bucle de recarga con un flag
-        if (!window._swReloaded) {
-          window._swReloaded = true;
-          // location.reload();
-        }
-      });
-    }
+    // Cuando el SW toma el control (primera visita o tras una actualización
+    // con skipWaiting), pedir de nuevo la versión activa para refrescar
+    // el indicador de la cabecera.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      requestVersion();
+    });
   });
 </script>
 
