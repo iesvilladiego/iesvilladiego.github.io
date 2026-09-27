@@ -4122,14 +4122,6 @@
   }
   .main-btn:active { transform: translateY(0) scale(.97); }
 
-  /* Versión del Service Worker activa, bajo los botones de perfil del Home */
-  .home-version {
-    margin-top: 1.6rem;
-    font-size: .75rem;
-    color: var(--muted);
-    letter-spacing: .03em;
-  }
-
   /* ══ Group view ═════════════════════════════════════ */
   #view-group {}
 
@@ -5300,7 +5292,6 @@
     .shield-wrap img { width: 146px; height: 146px; }
     .home-title { font-size: 1.2rem; }
     .home-sub { font-size: .8rem; margin-bottom: 1rem; }
-    .home-version { margin-top: 1rem; font-size: .7rem; }
 
     /* Modal de ayuda compacto: más ancho útil (fondo con menos margen),
        tipografía y espaciados ajustados, alto con dvh (croma móvil) */
@@ -5743,9 +5734,6 @@
         <span class="btn-icon">🤖</span>IA
       </button>
     </div>
-
-    <!-- Versión del Service Worker activa (la pide la página al SW al cargar) -->
-    <div id="homeVersion" class="home-version" hidden></div>
   </section>
 
   <!-- Vista: GRUPO -->
@@ -6194,7 +6182,6 @@
     if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
     const versionEl = document.getElementById('swVersion');
-    const homeVersionEl = document.getElementById('homeVersion');
 
     // 'portal-ies-v32' → 'v32' para mostrar sólo la etiqueta corta
     function shortVersion(v) {
@@ -6202,16 +6189,9 @@
     }
 
     function displayVersion(v) {
-      if (!v) return;
-      const label = shortVersion(v);
-      if (versionEl) {
-        versionEl.textContent = label;
-        versionEl.hidden = false;
-      }
-      if (homeVersionEl) {
-        homeVersionEl.textContent = label;
-        homeVersionEl.hidden = false;
-      }
+      if (!versionEl || !v) return;
+      versionEl.textContent = shortVersion(v);
+      versionEl.hidden = false;
     }
 
     function requestVersion() {
