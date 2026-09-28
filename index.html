@@ -3624,12 +3624,12 @@
     setTimeout(scheduleBackBtnUpdate, 600);
   }
 
-  // ── Botón Volver flotante: no tapar nunca botones ─────
-  // Regla (petición del usuario): el FAB «Volver» vive a media altura del
-  // lado derecho SIEMPRE QUE ese hueco esté libre de botones/controles.
-  // Si hay botones (tarjetas de apps, casillas, inputs, filtros…), baja
-  // JUSTO debajo de la última fila de botones que estorbe, lo más cerca
-  // posible del punto medio de la pantalla y siempre a la derecha.
+  // ── Botón Volver flotante: pegado a los botones, sin taparlos ─────
+  // Regla (petición del usuario): el FAB «Volver» aparece SIEMPRE en el
+  // lado derecho y lo más cerca posible de los botones/controles de la
+  // pantalla: se coloca pegado justo debajo o justo encima de alguno
+  // (10 px de margen) sin invadir ningún control. Si no hay controles
+  // visibles, queda a media altura del lado derecho.
   const BACK_BTN_INTERACTIVE_SEL =
     'a[href], button, input, select, textarea, [role="button"], .app-card';
   let _backBtnRafPending = false;
@@ -3662,43 +3662,71 @@
       const w = rect.width, h = rect.height;
       const rightPx = parseFloat(cs.right) || 16;   // incluye safe-area resuelta
       const left = vw - rightPx - w;
-      // Borde inferior del control más bajo que invada un hipotético rect
-      // del FAB centrado en topCenter (-1 si la zona queda libre)
-      const lowestConflict = (topCenter) => {
-        const top = topCenter - h / 2 + 2;    // +2/-2: tolerancia anti-parpadeo
-        const bottom = topCenter + h / 2 - 2;
+
+      // Rectángulos de los controles visibles con los que no debe chocar
+      const rects = [];
+      for (const el of interactive) {
+        if (el === fab || fab.contains(el) || el.contains(fab)) continue;
+        if (el.closest('.modal-bg')) continue; // tras el overlay del modal: no cuenta
+        const er = el.getBoundingClientRect();
+        if (er.width === 0 || er.height === 0) continue;
+        if (invisiblePorRecorte(el)) continue;
+        rects.push(er);
+      }
+
+      const topMin = h / 2 + 8, topMax = vh - h / 2 - 8;
+      // ¿El FAB centrado en `c` invade algún control? (-1 = posición libre)
+      const lowestConflict = (c) => {
+        const top = c - h / 2 + 2;    // +2/-2: tolerancia anti-parpadeo
+        const bottom = c + h / 2 - 2;
         let lowest = -1;
-        for (const el of interactive) {
-          if (el === fab || fab.contains(el) || el.contains(fab)) continue;
-          if (el.closest('.modal-bg')) continue; // tras el overlay del modal: no cuenta
-          const er = el.getBoundingClientRect();
-          if (er.width === 0 || er.height === 0) continue;
-          if (invisiblePorRecorte(el)) continue; // recortado por acordeón cerrado, etc.
-          if (er.left < left + w - 2 && er.right > left + 2 &&
-              er.top < bottom && er.bottom > top) {
-            if (er.bottom > lowest) lowest = er.bottom;
+        for (const r of rects) {
+          if (r.left < left + w - 2 && r.right > left + 2 &&
+              r.top < bottom && r.bottom > top) {
+            if (r.bottom > lowest) lowest = r.bottom;
           }
         }
         return lowest;
       };
-      let center = vh / 2;
-      let conflict = lowestConflict(center);
-      if (conflict >= 0) {
-        // Cascada: bajar justo debajo de la última fila de botones que
-        // invada cada posición candidata, avanzando hasta el primer hueco
-        // libre (así queda lo más cerca posible del punto medio) o hasta
-        // el límite inferior del viewport
-        const maxCenter = vh - h / 2 - 8;
-        let guard = 60;
-        while (conflict >= 0 && guard-- > 0) {
-          center = Math.min(conflict + 10 + h / 2, maxCenter);
-          if (center >= maxCenter) break;  // clavado abajo: imposible bajar más
-          conflict = lowestConflict(center);
+      // Distancia vertical del FAB (centrado en c) al control más cercano:
+      // 0 si queda a la misma altura que un botón (al lado) o pegado a él
+      const nearestGap = (c) => {
+        const top = c - h / 2, bottom = c + h / 2;
+        let best = Infinity;
+        for (const r of rects) {
+          const gap = Math.max(r.top - bottom, top - r.bottom, 0);
+          if (gap < best) best = gap;
         }
-        fab.style.top = center + 'px';     // el CSS mantiene translateY(-50%)
-      } else {
-        fab.style.top = '';                // hueco libre → CSS top:50% (punto medio)
+        return best;
+      };
+
+      const seen = new Set();
+      let best = null;   // { c, score }
+      const consider = (c) => {
+        if (c < topMin || c > topMax) return;
+        const key = Math.round(c);
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (lowestConflict(c) >= 0) return;
+        const score = nearestGap(c);
+        // Gana la posición más pegada a un control; a igualdad, la más
+        // cercana al punto medio de la pantalla (estabilidad)
+        if (!best || score < best.score - 0.5 ||
+            (Math.abs(score - best.score) <= 0.5 &&
+             Math.abs(c - vh / 2) < Math.abs(best.c - vh / 2))) {
+          best = { c, score };
+        }
+      };
+
+      // Candidatos: pegado justo debajo y justo encima de cada control
+      for (const r of rects) {
+        consider(r.bottom + 10 + h / 2);
+        consider(r.top - 10 - h / 2);
       }
+      // Respaldo: punto medio de la pantalla (si no hay controles cerca)
+      consider(vh / 2);
+
+      fab.style.top = (best ? best.c : topMax) + 'px';  // el CSS mantiene translateY(-50%)
     });
   }
 
