@@ -97,11 +97,13 @@ self.addEventListener('fetch', (event) => {
     return; // Dejar que Firebase gestione sus propias peticiones
   }
 
-  // Ignorar las rutas de otras PWAs del mismo origen (p. ej. Perfil Competencial).
-  // Sin esto, si el usuario navega a /perfilcompetencialv2/ antes de que su propio
-  // SW tome el control (o estando offline), este SW serviría el HTML del portal
-  // y Chrome instalaría/actualizaría el portal en lugar de la otra app.
-  if (url.origin === location.origin && url.pathname.startsWith('/perfilcompetencialv2')) {
+  // Ignorar las rutas de otras PWAs del mismo origen (Perfil Competencial y LaLiao).
+  // Sin esto, si el usuario navega a una de esas apps antes de que su propio
+  // SW tome el control (o estando offline), este SW serviría/cachearía su HTML
+  // y Chrome instalaría/actualizaría el portal en lugar de la otra app (o al
+  // revés, ocupando la identidad de la app instalada: icono y arranque erróneos).
+  if (url.origin === location.origin &&
+      (url.pathname.startsWith('/perfilcompetencialv2') || url.pathname.startsWith('/laliao'))) {
     return;
   }
 
