@@ -10,7 +10,7 @@
    - Si offline y el HTML no está cacheado, sirve la versión cacheada
 ╔═════════════════════════════════════════════════════════════════*/
 
-const CACHE_VERSION = 'portal-ies-v3.53';
+const CACHE_VERSION = 'portal-ies-v3.54';
 const CACHE_NAME = CACHE_VERSION;
 
 // Recursos estáticos que se cachean al instalar la PWA
@@ -97,12 +97,23 @@ self.addEventListener('fetch', (event) => {
     return; // Dejar que Firebase gestione sus propias peticiones
   }
 
-  // Ignorar las rutas de otras PWAs del mismo origen (p. ej. Perfil Competencial).
-  // Sin esto, si el usuario navega a /perfilcompetencialv2/ antes de que su propio
-  // SW tome el control (o estando offline), este SW serviría el HTML del portal
+  // Ignorar TODAS las rutas de otras PWAs alojadas en subcarpetas del mismo
+  // origen (p. ej. /perfilcompetencialv2/, /mmo/). Cada app la gestiona su
+  // propio SW; este SW solo atiende los recursos del propio portal en la raíz.
+  // Sin esto, si el usuario navega a una subcarpeta antes de que su propio SW
+  // tome el control (o estando offline), este SW serviría el HTML del portal
   // y Chrome instalaría/actualizaría el portal en lugar de la otra app.
-  if (url.origin === location.origin && url.pathname.startsWith('/perfilcompetencialv2')) {
-    return;
+  if (url.origin === location.origin) {
+    const path = url.pathname;
+    const isPortalAsset =
+      path === '/' ||
+      path === '/index.html' ||
+      path === '/sw.js' ||
+      path === '/manifest.webmanifest' ||
+      path === '/browserconfig.xml' ||
+      path === '/favicon.ico' ||
+      path.startsWith('/img/');
+    if (!isPortalAsset) return;
   }
 
   // Ignorar extensiones de Chrome y otras
