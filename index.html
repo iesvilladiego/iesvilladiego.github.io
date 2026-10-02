@@ -185,6 +185,7 @@
   let groupPasswords = { profesorado: "", gestion: "", recursos: "", ia: "" };
   let pendingGroup = null;   // Grupo pendiente de validar contraseña
   let appsFilter = 'all';        // Filtro de PERFIL en Configuración: 'all' | 'profesorado' | 'gestion' | 'recursos' | 'ia'
+  let appsSearchHighlight = null; // Índice de la app resaltada desde el modal «Buscar aplicación» (null = ninguno)
   let appsStateFilter = 'all';   // Filtro de ESTADO (combinable con el de perfil): 'all' | '_active' | '_inactive'
   let appsSort = { field: 'name', direction: 'asc' };  // Orden por defecto: alfabético por nombre
 
@@ -1042,6 +1043,7 @@
     // Resetear filtros al entrar en configuración
     appsFilter = 'all';
     appsStateFilter = 'all';
+    appsSearchHighlight = null;
     document.querySelectorAll('#appsFilterBar .filter-btn').forEach(btn => {
       btn.style.display = '';
       btn.classList.remove('active');
@@ -1107,6 +1109,7 @@
       if (uncategorized) rowClasses.push('row-uncategorized');
       const inactive = a.active === false;
       if (inactive) rowClasses.push('row-inactive');
+      if (i === appsSearchHighlight) rowClasses.push('row-search-hit');
       return `
       <tr data-i="${i}" class="${rowClasses.join(' ')}" data-uncategorized="${uncategorized}" data-inactive="${inactive}">
         <td data-label="Nombre"><input type="text" class="fi" value="${escHtml(a.name)}" placeholder="Nombre" data-field="name"></td>
@@ -1808,6 +1811,123 @@
 
   function closeRestoreModal() {
     document.getElementById("restoreModal").classList.add("hidden");
+  }
+
+  // ── Modal «Buscar aplicación» (Configuración) ─────────
+  // Búsqueda por palabras clave sobre nombre + descripción de TODAS las apps
+  // (incluidas las inactivas), sin distinguir mayúsculas ni acentos. Al pulsar
+  // un resultado se cierra el modal y la fila correspondiente de la tabla se
+  // resalta en otro color (clase .row-search-hit) y se lleva a la vista.
+
+  // Minúsculas quitando acentos, PRESERVANDO la longitud del texto original
+  // (a diferencia de normalizeForComparison, que elimina signos): permite
+  // resaltar en el texto original las coincidencias halladas en el plegado.
+  function foldStrLen(s) {
+    const map = { á:'a', à:'a', ä:'a', â:'a', ã:'a', é:'e', è:'e', ë:'e', ê:'e',
+                  í:'i', ì:'i', ï:'i', î:'i', ó:'o', ò:'o', ö:'o', ô:'o', õ:'o',
+                  ú:'u', ù:'u', ü:'u', û:'u', ñ:'n', ç:'c' };
+    return (s || '').toLowerCase().replace(/[áàäâãéèëêíìïîóòöôõúùüûñç]/g, c => map[c]);
+  }
+
+  function escRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Devuelve el texto escapado para HTML con las palabras buscadas resaltadas
+  // en <mark class="srch-hit"> (todas las coincidencias, solapadas combinadas)
+  function highlightSearchTerms(text, words) {
+    if (!text) return '';
+    if (!words.length) return escHtml(text);
+    const folded = foldStrLen(text);
+    const ranges = [];
+    words.forEach(w => {
+      const re = new RegExp(escRegex(w), 'g');
+      let m;
+      while ((m = re.exec(folded))) {
+        ranges.push([m.index, m.index + m[0].length]);
+        if (m.index === re.lastIndex) re.lastIndex++; // evita bucle con palabra vacía
+      }
+    });
+    if (!ranges.length) return escHtml(text);
+    ranges.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    const merged = [ranges[0]];
+    for (const r of ranges.slice(1)) {
+      const last = merged[merged.length - 1];
+      if (r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+      else merged.push(r);
+    }
+    let out = '', pos = 0;
+    for (const [s, e] of merged) {
+      out += escHtml(text.slice(pos, s))
+           + '<mark class="srch-hit">' + escHtml(text.slice(s, e)) + '</mark>';
+      pos = e;
+    }
+    return out + escHtml(text.slice(pos));
+  }
+
+  function showSearchAppModal() {
+    document.getElementById('searchAppInput').value = '';
+    document.getElementById('searchAppCount').textContent = '';
+    document.getElementById('searchAppResults').innerHTML = '';
+    document.getElementById('searchAppModal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('searchAppInput').focus(), 50);
+  }
+
+  function closeSearchAppModal() {
+    document.getElementById('searchAppModal').classList.add('hidden');
+  }
+
+  function runSearchAppModal() {
+    const raw = document.getElementById('searchAppInput').value || '';
+    const words = normalizeForComparison(raw).split(' ').filter(Boolean);
+    const list = document.getElementById('searchAppResults');
+    const cnt = document.getElementById('searchAppCount');
+    if (!words.length) {
+      list.innerHTML = '';
+      cnt.textContent = '';
+      return;
+    }
+    const foldedWords = words.map(foldStrLen);
+    const matches = [];
+    apps.forEach((a, i) => {
+      const hay = normalizeForComparison((a.name || '') + ' ' + (a.desc || ''));
+      if (foldedWords.every(w => hay.includes(w))) matches.push({ a, i });
+    });
+    if (!matches.length) {
+      cnt.textContent = 'Sin coincidencias';
+      list.innerHTML = '<p class="search-app-empty">Ninguna aplicación coincide con la búsqueda.</p>';
+      return;
+    }
+    cnt.textContent = `${matches.length} ${matches.length === 1 ? 'coincidencia' : 'coincidencias'}`;
+    list.innerHTML = matches.map(({ a, i }) => {
+      const nombre = a.name && a.name.trim() ? a.name : '(sin nombre)';
+      const badges = GROUP_KEYS.filter(k => a[k])
+        .map(k => `<span class="search-app-badge">${escHtml(groupLabel(k))}</span>`).join('');
+      const inactiva = a.active === false ? '<span class="search-app-badge search-app-badge-off">Inactiva</span>' : '';
+      const meta = [];
+      const descHtml = a.desc ? highlightSearchTerms(a.desc, foldedWords) : '';
+      if (a.url) meta.push(escHtml(a.url));
+      return `
+      <button type="button" class="search-app-item" onclick="ies.selectSearchApp(${i})" title="Resaltar esta aplicación en la tabla">
+        <span class="search-app-name">${highlightSearchTerms(nombre, foldedWords)}</span>
+        ${descHtml ? `<span class="search-app-desc">${descHtml}</span>` : ''}
+        <span class="search-app-meta">${meta.join(' · ')}${(meta.length && (badges || inactiva)) ? ' · ' : ''}${badges}${inactiva}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function selectSearchApp(i) {
+    closeSearchAppModal();
+    appsSearchHighlight = i;
+    buildConfigTable();
+    // Asegurar que el acordeón de Aplicaciones está desplegado
+    const acc = document.querySelector('.accordion[data-acc="apps"]');
+    if (acc && !acc.classList.contains('open')) ies.toggleAccordion('apps');
+    // Llevar la fila resaltada a la vista (tras repintar la tabla)
+    requestAnimationFrame(() => {
+      const tr = document.querySelector(`#appsTable tbody tr[data-i="${i}"]`);
+      if (tr) tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   // Borrado DEFINITIVO (Task 20): elimina la app de la papelera para siempre,
@@ -3754,6 +3874,8 @@
     showAddAppModal, closeAddAppModal, confirmAddApp, editApp,
     // Papelera: restaurar aplicaciones borradas
     showRestoreModal, closeRestoreModal, restoreApp, purgeApp,
+    // Búsqueda de aplicaciones por palabras clave (Configuración)
+    showSearchAppModal, closeSearchAppModal, runSearchAppModal, selectSearchApp,
     addAppNameInput, addAppFormChanged,
     addAdminRow, saveAdminsConfig,
     showChangePassModal, closeChangePassModal, doChangePassword, syncCpCurrentVisibility,
@@ -4586,6 +4708,68 @@
   }
   table#appsTable input[data-field="active"] {
     accent-color: #6b7280;
+  }
+
+  /* ══ Fila resaltada desde el modal «Buscar aplicación» ═══ */
+  table#appsTable tbody tr.row-search-hit td {
+    background: linear-gradient(to right, #e0f2fe 0%, #bae6fd 50%, #e0f2fe 100%) !important;
+    border-bottom: 1px solid #7dd3fc !important;
+  }
+  table#appsTable tbody tr.row-search-hit:hover td {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border-bottom-color: #60a5fa !important;
+  }
+  table#appsTable tbody tr.row-search-hit {
+    box-shadow: inset 4px 0 0 #0284c7;
+    animation: searchHitPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes searchHitPulse {
+    0%, 100% { box-shadow: inset 4px 0 0 #0284c7; }
+    50%      { box-shadow: inset 4px 0 0 #38bdf8; }
+  }
+  /* En móvil (tarjetas) */
+  @media (max-width: 767px) {
+    table#appsTable tr.row-search-hit {
+      background: linear-gradient(to right, #e0f2fe 0%, #bae6fd 50%, #e0f2fe 100%) !important;
+      outline: 2.5px solid #0284c7;
+      outline-offset: -1px;
+      border-radius: 12px;
+    }
+  }
+
+  /* ══ Modal «Buscar aplicación» ════════════════════════ */
+  .search-app-hint {
+    font-size: .82rem; color: var(--muted); margin-bottom: .75rem; line-height: 1.45;
+  }
+  .search-app-count {
+    font-size: .78rem; color: var(--muted); margin: .5rem 0 .25rem; font-style: italic;
+  }
+  .search-app-list {
+    max-height: 50vh; overflow-y: auto; border: 1px solid #e5e7eb;
+    border-radius: 10px; margin-top: .25rem;
+  }
+  .search-app-item {
+    display: flex; flex-direction: column; gap: .15rem; width: 100%;
+    text-align: left; background: var(--white); border: none;
+    border-bottom: 1px solid #f1f5f9; padding: .6rem .75rem;
+    font: inherit; color: inherit; cursor: pointer;
+  }
+  .search-app-item:last-child { border-bottom: none; }
+  .search-app-item:hover { background: #f0f9ff; }
+  .search-app-name { font-weight: 600; font-size: .9rem; }
+  .search-app-desc { font-size: .8rem; color: var(--text); }
+  .search-app-meta { font-size: .72rem; color: var(--muted); word-break: break-all; }
+  .search-app-badge {
+    display: inline-block; background: #eef2ff; color: #3730a3;
+    border-radius: 999px; padding: .05rem .5rem; margin-right: .25rem;
+    font-size: .7rem; font-weight: 600;
+  }
+  .search-app-badge-off { background: #f1f5f9; color: #64748b; }
+  .search-app-empty {
+    padding: 1rem .75rem; text-align: center; color: var(--muted); font-style: italic;
+  }
+  mark.srch-hit {
+    background: #fde68a; color: inherit; border-radius: 3px; padding: 0 2px;
   }
   /* En móvil (tarjetas) */
   @media (max-width: 767px) {
@@ -5813,6 +5997,7 @@
         </div>
         <div class="actions">
           <button class="btn btn-gold" onclick="ies.showAddAppModal()">＋ Añadir aplicación</button>
+          <button class="btn btn-ghost" onclick="ies.showSearchAppModal()" title="Buscar aplicaciones por palabras clave en su nombre o descripción y resaltar la elegida en la tabla">🔎 Buscar aplicación</button>
           <button class="btn btn-ghost" onclick="ies.sortApps('name')">↕ Ordenar por nombre</button>
           <button class="btn btn-ghost" onclick="ies.sortApps('url')">↕ Ordenar por URL</button>
           <button class="btn btn-ghost" id="btnRestoreDeleted" onclick="ies.showRestoreModal()" title="Recuperar aplicaciones eliminadas de la lista principal (se conservan en la base de datos)">♻️ Restaurar aplicaciones borradas</button>
@@ -6199,6 +6384,20 @@
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" onclick="ies.closeImportModal()">Cancelar</button>
       <button type="button" class="btn btn-primary" id="importConfirmBtn" onclick="ies.confirmImport()">📥 Importar seleccionadas</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL BUSCAR APLICACIÓN ═══════════ -->
+<div id="searchAppModal" class="modal-bg hidden">
+  <div class="modal">
+    <h2>🔎 Buscar aplicación</h2>
+    <p class="search-app-hint">Escribe una o varias palabras clave: se buscarán en el <strong>nombre</strong> y la <strong>descripción</strong> de las aplicaciones (sin distinguir mayúsculas, acentos ni palabras sueltas). Pulsa un resultado para resaltar su fila en la tabla.</p>
+    <input type="text" id="searchAppInput" class="fi" placeholder="Palabras clave (p. ej. notas evaluación)…" autocomplete="off" oninput="ies.runSearchAppModal()">
+    <div id="searchAppCount" class="search-app-count" role="status" aria-live="polite"></div>
+    <div id="searchAppResults" class="search-app-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="ies.closeSearchAppModal()">Cerrar</button>
     </div>
   </div>
 </div>
