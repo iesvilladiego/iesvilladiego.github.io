@@ -75,6 +75,11 @@
 
   <h2>3 · Si el portal sigue apareciendo como «AACCEE» (app instalada)</h2>
   <div class="card">
+    <div class="card info" style="border-left-color:#b91c1c;background:#fdf0f0">
+      <p><strong>⚠️ Si te aparece el diálogo de Chrome «Revisar actualizaciones de logotipo y nombre»</strong> (Portal IES Virgen de Villadiego → AACCEE Manager):</p>
+      <p>Pulsa <strong>«Desinstalar»</strong>. <strong>Nunca «Actualizar»</strong>: eso rebrandearía la PWA del portal convirtiéndola en AACCEE Manager (el portal dejaría de estar instalado). «Ignorar» solo aplaza el aviso, que volverá a aparecer.</p>
+      <p>Tras desinstalar desde ese diálogo, reinstala las dos aplicaciones desde sus direcciones (portal en la raíz, AACCEE en <span class="mono">/aaccee/</span>), y este aviso no volverá: cada una quedará con identidad propia.</p>
+    </div>
     <p><strong>Causa:</strong> las versiones antiguas de AACCEE se instalaban con <span class="mono">start_url:&nbsp;"/"</span>, es decir, reclamando la <em>misma identidad</em> que el portal dentro del dispositivo. Quien instaló AACCEE entonces tiene desde ese día una app llamada «AACCEE» ocupando la identidad del portal (id&nbsp;<span class="mono">"/"</span>), por eso el icono, el nombre o el aviso de instalación del portal salen sustituidos. Ese registro vive en el dispositivo y ninguna web puede borrarlo: hay que desinstalar esa app una sola vez.</p>
     <p>Tras la limpieza de arriba, desinstala <em>la app instalada «AACCEE»</em> (el icono del escritorio, no la web) y reinstala las dos aplicaciones; desde la corrección cada una tiene identidad propia (portal: <span class="mono">/</span> · AACCEE: <span class="mono">/aaccee/</span>) y ya no se sustituyen entre sí.</p>
     <ul>
@@ -83,6 +88,12 @@
       <li><strong>iPhone/iPad (Safari):</strong> mantén pulsado el icono de AACCEE → <em>Eliminar app</em> (o Eliminar marcador). Después, en cada dirección usa Compartir → <em>Añadir a pantalla de inicio</em>.</li>
     </ul>
     <p class="muted">Comprobación final: el icono de la raíz debe decir «Portal IES Virgen de Villadiego» / «IES VdV», y el de la subcarpeta «AACCEE». Si algo sigue raro, pulsa «Copiar informe» y envíalo junto a la descripción del problema.</p>
+  </div>
+
+  <h2>4 · Refuerzo en el repositorio (una sola vez, para todos los dispositivos)</h2>
+  <div class="card">
+    <p>Los dispositivos con el registro antiguo pueden tener guardada como manifest del portal la URL <span class="mono">/manifest.json</span> de una era en que AACCEE estuvo en la raíz (ahora esa URL devuelve 404, y Chrome acaba asociando la manifest de <span class="mono">/aaccee/</span>, originando el diálogo de «revisar logotipo y nombre»). Si en la <strong>raíz</strong> del repositorio <span class="mono">iesvilladiego.github.io</span> subes el fichero <span class="mono">manifest-raiz.json</span> <strong>renombrado a</strong> <span class="mono">manifest.json</span> (es una copia exacta del manifest del portal), esas comprobaciones recibirán siempre el branding correcto del portal y el diálogo dejará de proponerte AACCEE.</p>
+    <p class="muted">No afecta a AACCEE (su manifest vive en <span class="mono">/aaccee/manifest.json</span>) ni duplica la app del portal (ambas URLs declaran la misma identidad <span class="mono">id: "/"</span> con el mismo nombre e iconos).</p>
   </div>
 
   <details>
