@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Limpieza de PWA · IES Virgen de Villadiego</title>
+<style>
+  :root { --teal:#0d7377; --teal-dark:#0a5c60; --ink:#16323a; --muted:#5b7480; --bg:#f4f6f7; --card:#ffffff; --ok:#1a7f37; --warn:#b45309; --err:#b91c1c; --line:#dde5e8; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); margin: 0; padding: 1.2rem 1rem 3rem; line-height: 1.5; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { color: var(--teal); font-size: 1.35rem; margin: .2rem 0; }
+  h2 { font-size: 1.05rem; margin: 1.6rem 0 .5rem; border-bottom: 2px solid var(--teal); padding-bottom: .3rem; }
+  p.sub { color: var(--muted); margin: 0 0 1rem; }
+  .card { background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 1rem 1.1rem; margin: .8rem 0; }
+  .info { border-left: 4px solid var(--teal); background: #eef7f7; }
+  .info p { margin: .4rem 0; }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .82rem; word-break: break-all; }
+  .muted { color: var(--muted); }
+  .badge { display: inline-block; border-radius: 999px; padding: .1rem .6rem; font-size: .74rem; font-weight: 700; white-space: nowrap; }
+  .b-ok    { background: #dcf5e4; color: var(--ok); }
+  .b-app   { background: #e0f2f2; color: var(--teal-dark); }
+  .b-warn  { background: #fdeed3; color: var(--warn); }
+  .b-prot  { background: #ffffff; color: var(--ok); border: 1.5px solid var(--ok); }
+  .b-gray  { background: #e8ecee; color: #456; }
+  .item { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin: .5rem 0; display: flex; gap: .6rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+  .item .meta { flex: 1 1 260px; }
+  .item .meta div { margin: .1rem 0; }
+  .item .etq { font-weight: 700; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  button { font: inherit; cursor: pointer; border-radius: 10px; padding: .55rem 1rem; border: 1.5px solid var(--teal); background: var(--teal); color: #fff; font-weight: 700; }
+  button.sec { background: #fff; color: var(--teal); }
+  button.mini { padding: .3rem .7rem; font-size: .8rem; border-width: 1px; }
+  button.danger { background: #fff; color: var(--err); border-color: var(--err); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .acciones { display: flex; gap: .6rem; flex-wrap: wrap; margin: .8rem 0; }
+  #resumen { display: none; }
+  #resumen.ok { display: block; border-left: 4px solid var(--ok); }
+  ol li, ul li { margin: .35rem 0; }
+  details { margin: .8rem 0; }
+  summary { cursor: pointer; font-weight: 700; color: var(--teal-dark); }
+  .vacio { color: var(--muted); font-style: italic; }
+  code { background: #e8ecee; border-radius: 6px; padding: .05rem .35rem; font-size: .85em; }
+  footer { margin-top: 2rem; color: var(--muted); font-size: .85rem; text-align: center; }
+  @media (max-width: 480px) { body { padding: 1rem .7rem 2.5rem; } .card { padding: .8rem .8rem; } button { width: 100%; } .acciones button { width: 100%; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Limpieza de PWA — IES Virgen de Villadiego</h1>
+  <p class="sub">Herramienta de diagnóstico y limpieza de Service Workers y cachés residuales de AACCEE en este navegador/dispositivo.</p>
+
+  <div class="card info">
+    <p><strong>¿Cuándo usar esta página?</strong> Solo si en este dispositivo AACCEE sigue apareciendo donde debería estar el portal, o si ya instalaste AACCEE con una versión antigua. Ejecuta la limpieza y después reinicia las dos aplicaciones (pasos al final de la página).</p>
+    <p>La herramienta <strong>nunca toca</strong> el Service Worker ni las cachés del portal ( <span class="mono">/sw.js</span> y <span class="mono">portal-ies-*</span> ): solo retira restos de AACCEE. Todo lo eliminado se regenera solo al volver a entrar en cada aplicación.</p>
+  </div>
+
+  <h2>1 · Diagnóstico de este navegador</h2>
+  <div class="card" id="diag">
+    <p class="vacio">Analizando…</p>
+  </div>
+  <div class="acciones">
+    <button class="sec" id="btn-scan" type="button">Volver a escanear</button>
+    <button class="sec" id="btn-copy" type="button">Copiar informe</button>
+  </div>
+
+  <h2>2 · Limpieza de residuos de AACCEE</h2>
+  <div class="card">
+    <p>Elimina de este navegador: <strong>toda caché <span class="mono">ace-villadiego-*</span></strong> (incluidas las antiguas que guardaron páginas del portal) y <strong>todo registro de Service Worker vinculado a AACCEE</strong>. La próxima vez que abras la app en <span class="mono">/aaccee/</span> se volverá a registrar limpia, confinada a su carpeta.</p>
+    <div class="acciones">
+      <button id="btn-clean" type="button">Limpiar residuos de AACCEE</button>
+    </div>
+    <div class="card info" id="resumen" aria-live="polite"></div>
+  </div>
+
+  <h2>3 · Si el portal sigue apareciendo como «AACCEE» (app instalada)</h2>
+  <div class="card">
+    <p><strong>Causa:</strong> las versiones antiguas de AACCEE se instalaban con <span class="mono">start_url:&nbsp;"/"</span>, es decir, reclamando la <em>misma identidad</em> que el portal dentro del dispositivo. Quien instaló AACCEE entonces tiene desde ese día una app llamada «AACCEE» ocupando la identidad del portal (id&nbsp;<span class="mono">"/"</span>), por eso el icono, el nombre o el aviso de instalación del portal salen sustituidos. Ese registro vive en el dispositivo y ninguna web puede borrarlo: hay que desinstalar esa app una sola vez.</p>
+    <p>Tras la limpieza de arriba, desinstala <em>la app instalada «AACCEE»</em> (el icono del escritorio, no la web) y reinstala las dos aplicaciones; desde la corrección cada una tiene identidad propia (portal: <span class="mono">/</span> · AACCEE: <span class="mono">/aaccee/</span>) y ya no se sustituyen entre sí.</p>
+    <ul>
+      <li><strong>Android (Chrome):</strong> mantén pulsado el icono «AACCEE» del escritorio → <em>Desinstalar</em> (o arrastra a Desinstalar). Después abre <span class="mono">https://iesvilladiego.github.io/</span> → menú ⋮ → <em>Añadir a pantalla de inicio</em> → instala el portal; y repite lo mismo en <span class="mono">https://iesvilladiego.github.io/aaccee/</span> para AACCEE.</li>
+      <li><strong>Ordenador (Chrome/Edge):</strong> abre <span class="mono">chrome://apps</span> (o <span class="mono">edge://apps</span>) → clic derecho sobre «AACCEE» → <em>Desinstalar</em>. Luego visita la raíz y pulsa el icono de instalación de la barra de direcciones para el portal, y repite dentro de <span class="mono">/aaccee/</span>.</li>
+      <li><strong>iPhone/iPad (Safari):</strong> mantén pulsado el icono de AACCEE → <em>Eliminar app</em> (o Eliminar marcador). Después, en cada dirección usa Compartir → <em>Añadir a pantalla de inicio</em>.</li>
+    </ul>
+    <p class="muted">Comprobación final: el icono de la raíz debe decir «Portal IES Virgen de Villadiego» / «IES VdV», y el de la subcarpeta «AACCEE». Si algo sigue raro, pulsa «Copiar informe» y envíalo junto a la descripción del problema.</p>
+  </div>
+
+  <details>
+    <summary>Avanzado: ver y borrar cada registro y caché por separado</summary>
+    <div class="card" id="avanzado"></div>
+  </details>
+
+  <footer>Herramienta puntual de mantenimiento — puedes borrar este fichero del repositorio cuando el problema esté resuelto.</footer>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var AACCEE = /aaccee/i;
+  var CACHE_AACCEE = /^ace-villadiego-/i;
+  var CACHE_PORTAL = /^(portal-ies-|tecnovilladiego-)/i;
+  var registro = { acciones: [], diagnosticos: null };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function badge(cls, text) { return el('span', 'badge ' + cls, text); }
+
+  function clasificaRegistro(reg) {
+    var script = (reg.active || reg.waiting || reg.installing || {}).scriptURL || '';
+    if (reg.scope === location.origin + '/' && !AACCEE.test(script)) return 'portal';
+    if (AACCEE.test(script) || AACCEE.test(reg.scope)) return 'aaccee';
+    return 'otro';
+  }
+  function clasificaCache(nombre) {
+    if (CACHE_AACCEE.test(nombre)) return 'aaccee';
+    if (CACHE_PORTAL.test(nombre)) return 'portal';
+    return 'otro';
+  }
+
+  async function escanear() {
+    var diag = document.getElementById('diag');
+    diag.textContent = '';
+    diag.appendChild(el('p', null, 'Origen: ')).appendChild(el('span', 'mono', location.origin));
+    var regs = [];
+    try { regs = await navigator.serviceWorker.getRegistrations(); } catch (e) { /* http no seguro */ }
+    var nombres = [];
+    try { nombres = await caches.keys(); } catch (e) { /* sin CacheStorage */ }
+
+    diag.appendChild(el('p', 'etq', 'Service Workers registrados en este origen'));
+    if (!regs.length) {
+      diag.appendChild(el('p', 'vacio', 'Ninguno. Sin residuos de SW.'));
+    }
+    registro.diagnosticos = { registrados: [], caches: [] };
+    regs.forEach(function (reg) {
+      var tipo = clasificaRegistro(reg);
+      var sw = reg.active || reg.waiting || reg.installing;
+      var fila = el('div', 'item');
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'etq', 'Registro'));
+      meta.appendChild(el('div', 'mono', 'scope: ' + reg.scope));
+      meta.appendChild(el('div', 'mono', 'script: ' + ((sw && sw.scriptURL) || '?')));
+      meta.appendChild(el('div', 'mono', 'estado: ' + ((sw && sw.state) || '?')));
+      fila.appendChild(meta);
+      fila.appendChild(badge(tipo === 'portal' ? 'b-prot' : tipo === 'aaccee' ? 'b-app' : 'b-gray',
+        tipo === 'portal' ? 'portal · se conserva' : tipo === 'aaccee' ? 'AACCEE' : 'otro'));
+      diag.appendChild(fila);
+      registro.diagnosticos.registrados.push({ scope: reg.scope, script: (sw && sw.scriptURL) || '?', estado: (sw && sw.state) || '?', tipo: tipo });
+    });
+
+    diag.appendChild(el('p', 'etq', 'Cachés de este origen'));
+    if (!nombres.length) diag.appendChild(el('p', 'vacio', 'Ninguna.'));
+    for (var i = 0; i < nombres.length; i++) {
+      var nombre = nombres[i];
+      var tipo = clasificaCache(nombre);
+      var n = 0;
+      try { n = (await (await caches.open(nombre)).keys()).length; } catch (e) { /* ignore */ }
+      var fila = el('div', 'item');
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'etq', 'Caché'));
+      meta.appendChild(el('div', 'mono', nombre + ' · ' + n + ' entrada(s)'));
+      fila.appendChild(meta);
+      fila.appendChild(badge(tipo === 'portal' ? 'b-ok' : tipo === 'aaccee' ? 'b-warn' : 'b-gray',
+        tipo === 'portal' ? 'portal · se conserva' : tipo === 'aaccee' ? 'eliminable' : 'otra'));
+      diag.appendChild(fila);
+      registro.diagnosticos.caches.push({ nombre: nombre, entradas: n, tipo: tipo });
+    }
+
+    var ctl = navigator.serviceWorker.controller;
+    diag.appendChild(el('p', 'etq', 'Esta página está controlada por'));
+    diag.appendChild(el('p', 'mono', ctl ? ctl.scriptURL : 'ningún SW (control nulo)'));
+
+    pintarAvanzado(regs, nombres);
+  }
+
+  function pintarAvanzado(regs, nombres) {
+    var zona = document.getElementById('avanzado');
+    zona.textContent = '';
+    zona.appendChild(el('p', 'muted', 'Uso puntual. Eliminar el registro del portal solo le quita el modo offline hasta que recargues el portal (se re-registra solo).'));
+    regs.forEach(function (reg, idx) {
+      var fila = el('div', 'item');
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'mono', 'scope: ' + reg.scope));
+      fila.appendChild(meta);
+      var b = el('button', 'mini danger', 'Eliminar registro');
+      b.addEventListener('click', async function () {
+        if (!confirm('¿Eliminar el registro con scope ' + reg.scope + '?')) return;
+        try { await reg.unregister(); apuntar('SW unregister', reg.scope); } catch (e) { apuntar('ERROR unregister', String(e)); }
+        escanear();
+      });
+      fila.appendChild(b);
+      zona.appendChild(fila);
+    });
+    nombres.forEach(function (nombre) {
+      var fila = el('div', 'item');
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'mono', nombre));
+      fila.appendChild(meta);
+      var b = el('button', 'mini danger', 'Borrar caché');
+      b.addEventListener('click', async function () {
+        if (!confirm('¿Borrar la caché ' + nombre + '?')) return;
+        try { await caches.delete(nombre); apuntar('caches.delete', nombre); } catch (e) { apuntar('ERROR delete', String(e)); }
+        escanear();
+      });
+      fila.appendChild(b);
+      zona.appendChild(fila);
+    });
+  }
+
+  function apuntar(tipo, detalle) {
+    registro.acciones.push(tipo + ' → ' + detalle);
+  }
+
+  async function limpiarAaccee() {
+    var btn = document.getElementById('btn-clean');
+    var resumen = document.getElementById('resumen');
+    btn.disabled = true;
+    resumen.className = 'card info';
+    resumen.textContent = 'Limpiando…';
+    registro.acciones = [];
+    var swBorrados = 0, cachesBorradas = 0, fallos = 0;
+
+    var regs = [];
+    try { regs = await navigator.serviceWorker.getRegistrations(); } catch (e) { /* ignore */ }
+    for (var i = 0; i < regs.length; i++) {
+      if (clasificaRegistro(regs[i]) === 'aaccee') {
+        try { await regs[i].unregister(); swBorrados++; apuntar('SW de AACCEE eliminado', regs[i].scope); }
+        catch (e) { fallos++; apuntar('ERROR al eliminar SW', String(e)); }
+      }
+    }
+    var nombres = [];
+    try { nombres = await caches.keys(); } catch (e) { /* ignore */ }
+    for (var j = 0; j < nombres.length; j++) {
+      if (CACHE_AACCEE.test(nombres[j])) {
+        try { await caches.delete(nombres[j]); cachesBorradas++; apuntar('Caché de AACCEE borrada', nombres[j]); }
+        catch (e) { fallos++; apuntar('ERROR al borrar caché', String(e)); }
+      }
+    }
+
+    resumen.className = 'card info ok';
+    resumen.textContent = '';
+    resumen.appendChild(el('p', null, 'Limpieza completada: ' + swBorrados + ' registro(s) de SW de AACCEE eliminados, ' + cachesBorradas + ' caché(s) borradas' + (fallos ? ', ' + fallos + ' fallo(s)' : '') + '. El portal y sus cachés no se han tocado.'));
+    resumen.appendChild(el('p', 'muted', 'Ahora entra en https://iesvilladiego.github.io/aaccee/ y la app se registrará de cero, ya limpia y confinada a su carpeta. Si el icono del escritorio seguía llamándose AACCEE en lugar del portal, desinstala esa app y reinstálala (paso 3).'));
+    btn.disabled = false;
+    escanear();
+  }
+
+  function copiarInforme() {
+    var r = registro.diagnosticos || { registrados: [], caches: [] };
+    var lineas = [];
+    lineas.push('Informe de limpieza PWA — ' + new Date().toISOString());
+    lineas.push('Origen: ' + location.origin);
+    lineas.push('Navegador: ' + navigator.userAgent);
+    lineas.push('SW que controla esta página: ' + ((navigator.serviceWorker.controller || {}).scriptURL || 'ninguno'));
+    lineas.push('Registros (' + r.registrados.length + '):');
+    r.registrados.forEach(function (x) { lineas.push('  - [' + x.tipo + '] scope=' + x.scope + ' script=' + x.script + ' estado=' + x.estado); });
+    lineas.push('Cachés (' + r.caches.length + '):');
+    r.caches.forEach(function (x) { lineas.push('  - [' + x.tipo + '] ' + x.nombre + ' (' + x.entradas + ' entradas)'); });
+    if (registro.acciones.length) {
+      lineas.push('Acciones realizadas:');
+      registro.acciones.forEach(function (a) { lineas.push('  * ' + a); });
+    }
+    var texto = lineas.join('\n');
+    function aviso() {
+      var b = document.getElementById('btn-copy');
+      var t = b.textContent;
+      b.textContent = '¡Informe copiado!';
+      setTimeout(function () { b.textContent = t; }, 1800);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(aviso, function () { fallback(texto); aviso(); });
+    } else { fallback(texto); aviso(); }
+    function fallback(t) {
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+  }
+
+  document.getElementById('btn-scan').addEventListener('click', escanear);
+  document.getElementById('btn-clean').addEventListener('click', limpiarAaccee);
+  document.getElementById('btn-copy').addEventListener('click', copiarInforme);
+  if (location.protocol === 'http:' && !/^(localhost|127\.|192\.168\.)/.test(location.hostname)) {
+    var diag = document.getElementById('diag');
+    diag.insertBefore(el('p', 'badge b-warn', 'Aviso: sin HTTPS el navegador desactiva Service Workers; abre esta página con https://'), diag.firstChild);
+  }
+  escanear();
+})();
+</script>
+</body>
+</html>
