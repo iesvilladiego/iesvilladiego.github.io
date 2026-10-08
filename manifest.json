@@ -2,7 +2,7 @@
   "name": "Portal IES Virgen de Villadiego",
   "short_name": "IES VdV",
   "description": "Portal de aplicaciones del IES Virgen de Villadiego. Acceso rápido a las aplicaciones del centro para Profesorado, Gestión y Administrativa.",
-  "id": "/",
+  "id": "/portal-ies-vdv/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
