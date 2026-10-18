@@ -1121,7 +1121,7 @@
         <td data-label="Gest." class="chk"><input type="checkbox" ${a.gestion        ? "checked" : ""} data-field="gestion"></td>
         <td data-label="Rec." class="chk"><input type="checkbox" ${a.recursos       ? "checked" : ""} data-field="recursos"></td>
         <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
-        <td data-label="Activa" class="chk chk-activa"><input type="checkbox" ${inactive ? "" : "checked"} data-field="active" title="Desmarca para ocultar la app en el perfil (queda desactivada, NO se borra)"></td>
+        <td data-label="Act." class="chk chk-activa"><input type="checkbox" ${inactive ? "" : "checked"} data-field="active" title="Desmarca para ocultar la app en el perfil (queda desactivada, NO se borra)"></td>
         <td data-label="" class="chk"><button class="btn-launch" onclick="ies.launchApp(${i})" title="Abrir aplicación (pestaña nueva)" aria-label="Abrir aplicación">🚀</button><button class="btn-edit" onclick="ies.editApp(${i})" title="Editar" aria-label="Editar aplicación">✎</button><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
       </tr>`;}).join("");
 
@@ -5579,6 +5579,26 @@
     }
     table#appsTable td:last-child::before,
     table#adminsTable td:last-child::before { display: none; }
+    /* Los 5 checks de clasificación (Prof./Gest./Rec./IA/Act.) en UNA
+       sola fila: rejilla de 10 pistas → Nombre y Descripción ocupan
+       5+5 pistas, la URL va a ancho completo y cada check toma 2 pistas
+       con su encabezado abreviado centrado encima. */
+    table#appsTable tbody tr {
+      grid-template-columns: repeat(10, 1fr);
+      column-gap: .4rem;
+    }
+    table#appsTable tbody td:nth-child(1),
+    table#appsTable tbody td:nth-child(2) { grid-column: span 5; }
+    table#appsTable tbody td:nth-child(3) { grid-column: span 10; }
+    table#appsTable tbody td:nth-child(4),
+    table#appsTable tbody td:nth-child(5),
+    table#appsTable tbody td:nth-child(6),
+    table#appsTable tbody td:nth-child(7),
+    table#appsTable tbody td:nth-child(8) {
+      grid-column: span 2;
+      align-items: center;
+    }
+    table#appsTable tbody td[colspan] { grid-column: 1 / -1; }
     .desc-cell { min-width: 0; }
     .url-fi { min-width: 0; }
     .url-cell { min-width: 0; }
