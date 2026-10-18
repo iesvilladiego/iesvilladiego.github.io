@@ -2511,16 +2511,45 @@
   // bajo demanda al pulsar el botón, para no ralentizar el primer paint.
 
   // Carga un script externo si aún no está en la página.
+  const _scriptLoads = new Map();
   function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const existing = document.querySelector(`script[src="${src}"]`);
-      if (existing) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('No se pudo cargar ' + src));
-      document.head.appendChild(s);
+    if (_scriptLoads.has(src)) return _scriptLoads.get(src);
+
+    let resolveLoad, rejectLoad;
+    const promise = new Promise((resolve, reject) => {
+      resolveLoad = resolve;
+      rejectLoad = reject;
     });
+    _scriptLoads.set(src, promise);
+
+    try {
+      let script = Array.from(document.scripts).find(s => s.src === new URL(src, document.baseURI).href);
+      const created = !script;
+      if (!script) {
+        script = document.createElement('script');
+        script.src = src;
+      }
+
+      const cleanup = () => {
+        script.removeEventListener('load', onLoad);
+        script.removeEventListener('error', onError);
+      };
+      const onLoad = () => { cleanup(); resolveLoad(); };
+      const onError = () => {
+        cleanup();
+        if (created) script.remove();
+        _scriptLoads.delete(src);
+        rejectLoad(new Error('No se pudo cargar ' + src));
+      };
+
+      script.addEventListener('load', onLoad, { once: true });
+      script.addEventListener('error', onError, { once: true });
+      if (created) document.head.appendChild(script);
+    } catch (error) {
+      _scriptLoads.delete(src);
+      rejectLoad(error);
+    }
+    return promise;
   }
 
   // Recoge los datos a exportar según las selecciones del usuario.
