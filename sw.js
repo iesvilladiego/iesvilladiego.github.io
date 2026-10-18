@@ -10,7 +10,7 @@
    - Si offline y el HTML no está cacheado, sirve la versión cacheada
 ╔═════════════════════════════════════════════════════════════════*/
 
-const CACHE_VERSION = 'portal-ies-v3.62';
+const CACHE_VERSION = 'portal-ies-v3.63';
 const CACHE_NAME = CACHE_VERSION;
 
 // Recursos estáticos que se cachean al instalar la PWA
@@ -104,15 +104,21 @@ self.addEventListener('fetch', (event) => {
   // tome el control (o estando offline), este SW serviría el HTML del portal
   // y Chrome instalaría/actualizaría el portal en lugar de la otra app.
   if (url.origin === location.origin) {
-    const path = url.pathname;
-    const isPortalAsset =
-      path === '/' ||
-      path === '/index.html' ||
-      path === '/sw.js' ||
-      path === '/manifest.webmanifest' ||
-      path === '/browserconfig.xml' ||
-      path === '/favicon.ico' ||
-      path.startsWith('/img/');
+    // Derivar la base del ámbito del SW permite que el mismo código funcione
+    // tanto en la raíz como si el portal se sirve desde una subcarpeta.
+    const scopePath = new URL(self.registration.scope).pathname;
+    const relativePath = url.pathname.startsWith(scopePath)
+      ? url.pathname.slice(scopePath.length)
+      : null;
+    const isPortalAsset = relativePath !== null && (
+      relativePath === '' ||
+      relativePath === 'index.html' ||
+      relativePath === 'sw.js' ||
+      relativePath === 'manifest.webmanifest' ||
+      relativePath === 'browserconfig.xml' ||
+      relativePath === 'favicon.ico' ||
+      relativePath.startsWith('img/')
+    );
     if (!isPortalAsset) return;
   }
 
@@ -126,17 +132,24 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((response) => {
-          // Guardar la versión fresca en caché
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(req, clone);
-          });
+          // No guardar 404/500 como si fueran páginas válidas.
+          if (response.ok) {
+            const clone = response.clone();
+            event.waitUntil(
+              caches.open(CACHE_NAME).then((cache) => cache.put(req, clone))
+            );
+          }
           return response;
         })
         .catch(() => {
-          // Sin conexión: servir la versión cacheada
+          // Sin conexión: servir solo una copia de esa misma URL. No devolver
+          // la portada para un enlace profundo inexistente.
           return caches.match(req).then((cached) => {
-            return cached || caches.match('./index.html');
+            return cached || new Response('Sin conexión y sin copia guardada.', {
+              status: 503,
+              statusText: 'Offline',
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            });
           });
         })
     );
