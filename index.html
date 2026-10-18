@@ -1122,7 +1122,7 @@
         <td data-label="Rec." class="chk"><input type="checkbox" ${a.recursos       ? "checked" : ""} data-field="recursos"></td>
         <td data-label="IA" class="chk"><input type="checkbox" ${a.ia ? "checked" : ""} data-field="ia"></td>
         <td data-label="Activa" class="chk chk-activa"><input type="checkbox" ${inactive ? "" : "checked"} data-field="active" title="Desmarca para ocultar la app en el perfil (queda desactivada, NO se borra)"></td>
-        <td data-label="" class="chk"><button class="btn-edit" onclick="ies.editApp(${i})" title="Editar" aria-label="Editar aplicación">✎</button><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
+        <td data-label="" class="chk"><button class="btn-launch" onclick="ies.launchApp(${i})" title="Abrir aplicación (pestaña nueva)" aria-label="Abrir aplicación">🚀</button><button class="btn-edit" onclick="ies.editApp(${i})" title="Editar" aria-label="Editar aplicación">✎</button><button class="btn-del" onclick="window._delApp(${i})" title="Eliminar">✕</button></td>
       </tr>`;}).join("");
 
     // ══ LIMPIAR EVENT LISTENERS ANTERIORES (evita memory leaks) ══
@@ -1228,6 +1228,23 @@
     // Volver es fijo por CSS (centrado vertical, lado derecho) en cualquier
     // dispositivo; la llamada queda solo como limpieza defensiva
     scheduleBackBtnUpdate();
+  }
+
+  // ── Lanzar aplicación desde la tabla de Configuración ─
+  // Abre la URL de la app en una pestaña nueva (noopener por seguridad).
+  // Antes de leer la URL sincroniza la tabla (collectTableData), de modo
+  // que si el administrador acaba de teclear una ruta y no ha salido de la
+  // celda, se lanza la URL recién escrita y no la antigua guardada.
+  function launchApp(i) {
+    const a = apps[i];
+    if (!a) return;
+    collectTableData();                       // sincroniza la URL tecleada (sin persistir)
+    const url = sanitizeUrl((apps[i] || a).url);
+    if (!url || url === "#") {
+      showToast("Esta aplicación no tiene una URL válida. Escribe la ruta (p. ej. mmo) o la URL completa en la columna «URL».", "err", 5000);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   // Cambia el filtro activo en la tabla de apps y refresca.
@@ -3770,7 +3787,7 @@
     showAboutModal, closeAboutModal,
     renderHome, renderConfig, saveConfig,
     // Alta de aplicaciones vía modal (sustituye al antiguo addAppRow)
-    showAddAppModal, closeAddAppModal, confirmAddApp, editApp,
+    showAddAppModal, closeAddAppModal, confirmAddApp, editApp, launchApp,
     // Papelera: restaurar aplicaciones borradas
     showRestoreModal, closeRestoreModal, restoreApp, purgeApp,
     // Búsqueda de aplicaciones por palabras clave (Configuración)
@@ -4768,6 +4785,19 @@
   }
   .btn-del:hover { transform: scale(1.3); background: rgba(192,57,43,.08); }
   .btn-del:active { transform: scale(1.1); }
+
+  /* Lanzar aplicación (🚀): misma geometría que ✎/✕, tinte neutro del centro */
+  .btn-launch {
+    background: none; border: none; cursor: pointer;
+    color: var(--navy); font-size: 1.05rem;
+    transition: transform .15s;
+    min-width: 40px; min-height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-launch:hover { transform: scale(1.3); background: rgba(46,63,82,.08); }
+  .btn-launch:active { transform: scale(1.1); }
 
   /* Task 17: botón EDITAR de cada fila (gemelo de .btn-del, en navy) */
   .btn-edit {
@@ -5818,6 +5848,7 @@
       <li><strong>Cambio de sesión:</strong> mantén pulsado <strong>⚙ Configuración</strong> ≈1 segundo para volver a bloquear todos los accesos sin reiniciar la app.</li>
       <li><strong>Administradores:</strong> un clic normal en ⚙ pide usuario y contraseña para gestionar aplicaciones, perfiles y contraseñas.</li>
       <li><strong>Descripción de una app:</strong> con el ratón, al pasar el puntero por el icono se muestra su descripción en un cartel (y, si la app lo indica, el tipo de login del profesorado parpadeando debajo). En móvil o tablet, <strong>mantén pulsado</strong> el icono medio segundo.</li>
+      <li><strong>Lanzar una app (administradores):</strong> en Configuración, el botón 🚀 de cada fila abre la aplicación en una pestaña nueva. Lanza la URL que esté escrita en ese momento en la columna «URL»: si acabas de teclear una ruta, se abre ya, sin necesidad de guardar antes.</li>
       <li><strong>Editar una app (administradores):</strong> en Configuración, el botón ✎ de cada fila abre el mismo modal que el alta, ya precargado. Ahí puedes marcar «Login del profesorado con usuario IdEA» o «…con usuario / usuario.» (uno, otro o ninguno): el texto marcado se verá parpadeando bajo la descripción en su perfil.</li>
       <li><strong>¿Borraste una app por error?</strong> Al eliminarla va a la papelera de la base de datos: pulsa «♻️ Restaurar aplicaciones borradas» en Configuración para recuperarla. Si no tenía ningún perfil, al restaurar se te pedirá asignarle al menos uno. Ese mismo listado permite el <strong>borrado definitivo</strong> (botón 🗑): la app desaparece de la base de datos para siempre, tras una confirmación.</li>
     </ol>
