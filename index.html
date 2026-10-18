@@ -4551,6 +4551,18 @@
     border-bottom: 1px solid #e5e7eb;
     vertical-align: middle;
   }
+
+  /* Acciones de fila (🚀 Abrir · ✎ Editar · ✕ Eliminar): SIEMPRE en una
+     sola línea en pantallas amplias (portátil/PC). Con width:1% + nowrap
+     la columna se ajusta al contenido de los botones y el ancho sobrante
+     lo aprovechan el nombre, la descripción y la URL (sin romper a dos
+     líneas cuando la tabla está justa de espacio). */
+  table#appsTable th:last-child,
+  table#appsTable td:last-child {
+    white-space: nowrap;
+    width: 1%;
+  }
+
   table#appsTable tr:hover td,
   table#adminsTable tr:hover td { background: #f4f2e2; }
 
@@ -5557,7 +5569,13 @@
     table#appsTable td:last-child,
     table#adminsTable td:last-child {
       grid-column: 1 / -1;
-      align-items: stretch;
+      /* Los 3 botones (🚀 Abrir · ✎ Editar · ✕ Eliminar) en UNA fila
+         horizontal al pie de la tarjeta, debajo de los checks de
+         clasificación (Prof./Gest./Rec./IA/Act.) */
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: .35rem;
     }
     table#appsTable td:last-child::before,
     table#adminsTable td:last-child::before { display: none; }
@@ -5624,9 +5642,11 @@
     }
   }
 
-  /* ── Pantallas muy anchas (1280px+) ──────────────── */
+  /* ── Pantallas muy anchas (1280px+, portátil/PC) ─── */
   @media (min-width: 1280px) {
-    main { max-width: 1080px; }
+    /* Interfaz más ancho: se aprovecha el espacio desaprovechado a
+       izquierda y derecha de la pantalla (petición del usuario) */
+    main { max-width: 1280px; }
     .app-grid {
       grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     }
@@ -5636,7 +5656,7 @@
 
   /* ── Pantallas 4K/Ultra-wide (1920px+) ─────────────── */
   @media (min-width: 1920px) {
-    main { max-width: 1400px; }
+    main { max-width: 1600px; }
     .app-grid {
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1.5rem;
