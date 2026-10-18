@@ -5582,8 +5582,16 @@
     /* Los 3 botones (🚀 Lanzar · ✎ Editar · ✕ Eliminar) centrados
        horizontalmente, alineados con el eje de la fila de checks de
        clasificación que tienen encima (Prof./Gest./Rec./IA/Act.).
-       #adminsTable conserva su alineación a la izquierda. */
-    table#appsTable tbody td:last-child { justify-content: center; }
+       #adminsTable conserva su alineación a la izquierda.
+       ⚠ width:auto es OBLIGATORIO aquí: anula el width:1% de la regla
+       global de escritorio (columna Acciones ajustada al contenido).
+       Sin él, esta celda se encoge a ~3px en la tarjeta y, al centrar
+       los botones, el primero (🚀) desborda por la izquierda y queda
+       recortado (invisible) por .tbl-wrap { overflow-x: auto }. */
+    table#appsTable tbody td:last-child {
+      width: auto;
+      justify-content: center;
+    }
     /* Los 5 checks de clasificación (Prof./Gest./Rec./IA/Act.) en UNA
        sola fila: rejilla de 10 pistas → Nombre y Descripción ocupan
        5+5 pistas, la URL va a ancho completo y cada check toma 2 pistas
