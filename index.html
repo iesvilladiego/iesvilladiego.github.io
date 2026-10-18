@@ -1224,8 +1224,9 @@
     updateFilterCounts();
     // Contador de la papelera en el botón de restauración
     updateRestoreBtnCount();
-    // La tabla cambió (añadir/borrar/importar/filtrar/ordenar): recolocar
-    // el botón Volver flotante para que siga sin tapar controles
+    // La tabla cambió (añadir/borrar/importar/filtrar/ordenar): el botón
+    // Volver es fijo por CSS (centrado vertical, lado derecho) en cualquier
+    // dispositivo; la llamada queda solo como limpieza defensiva
     scheduleBackBtnUpdate();
   }
 
@@ -3400,8 +3401,8 @@
     if (descModal && !descModal.classList.contains("hidden")) {
       descModal.classList.add("hidden");
     }
-    // Recolocar el botón Volver flotante: a la mitad derecha si el hueco
-    // está libre de botones; si no, justo debajo de la última fila que estorbe
+    // Botón Volver flotante: el CSS ya lo mantiene centrado verticalmente
+    // a la derecha en cualquier dispositivo; limpieza defensiva de residuos
     updateBackBtnPositions();
   }
 
@@ -3738,131 +3739,29 @@
         syncExportAppPanel();
       }
     }
-    // El despliegue/repliegue mueve contenido bajo el botón Volver flotante:
-    // recolocarlo ahora y al terminar la transición del acordeón (0.5s)
-    scheduleBackBtnUpdate();
-    setTimeout(scheduleBackBtnUpdate, 600);
+    // Nota: el botón Volver flotante es CSS-fijo (centrado vertical, lado
+    // derecho en cualquier dispositivo) y no depende del acordeón
   }
 
-  // ── Botón Volver flotante: pegado a los botones, sin taparlos ─────
-  // Regla (petición del usuario): el FAB «Volver» aparece SIEMPRE en el
-  // lado derecho y lo más cerca posible de los botones/controles de la
-  // pantalla: se coloca pegado justo debajo o justo encima de alguno
-  // (10 px de margen) sin invadir ningún control. Si no hay controles
-  // visibles, queda a media altura del lado derecho.
-  const BACK_BTN_INTERACTIVE_SEL =
-    'a[href], button, input, select, textarea, [role="button"], .app-card';
-  let _backBtnRafPending = false;
-
+  // ── Botón Volver flotante: SIEMPRE centrado, lado derecho ─────────
+  // Regla (petición del usuario): el FAB «Volver» permanece SIEMPRE en
+  // el centro vertical de la pantalla (top: 50% del viewport), pegado al
+  // lateral derecho, sea cual sea el dispositivo en el que se ejecute la
+  // app. El posicionamiento lo resuelve únicamente el CSS (.back-btn:
+  // position:fixed + top:50% + translateY(-50%) + safe-area-inset-right),
+  // así que el botón no se mueve al hacer scroll, al filtrar la tabla ni
+  // al desplegar acordeones. La función se conserva como limpieza
+  // defensiva: elimina cualquier style.top inline residual para que el
+  // centrado CSS nunca quede pisado.
   function updateBackBtnPositions() {
-    const fabs = Array.from(document.querySelectorAll('.back-btn'))
-      .filter(b => b.getBoundingClientRect().width > 0);
-    if (!fabs.length) {
-      // Sin FAB visible (p. ej. Home): limpiar posiciones inline residuales
-      document.querySelectorAll('.back-btn').forEach(b => { b.style.top = ''; });
-      return;
-    }
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const interactive = Array.from(document.querySelectorAll(BACK_BTN_INTERACTIVE_SEL));
-
-    // Un elemento puede tener rect geométrico NO nulo y aun así estar
-    // INVISIBLE: los acordeones cerrados usan max-height:0 + overflow:hidden
-    // (sus hijos conservan geometría pero quedan recortados). Hay que
-    // ignorarlos para no esquivar controles que no se ven.
-    const invisiblePorRecorte = (el) => {
-      if (getComputedStyle(el).visibility === 'hidden') return true;
-      for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
-        if (p.clientHeight === 0 && getComputedStyle(p).overflowY !== 'visible') return true;
-      }
-      return false;
-    };
-    fabs.forEach(fab => {
-      const cs = getComputedStyle(fab);
-      const rect = fab.getBoundingClientRect();
-      const w = rect.width, h = rect.height;
-      const rightPx = parseFloat(cs.right) || 16;   // incluye safe-area resuelta
-      const left = vw - rightPx - w;
-
-      // Rectángulos de los controles visibles con los que no debe chocar
-      const rects = [];
-      for (const el of interactive) {
-        if (el === fab || fab.contains(el) || el.contains(fab)) continue;
-        if (el.closest('.modal-bg')) continue; // tras el overlay del modal: no cuenta
-        const er = el.getBoundingClientRect();
-        if (er.width === 0 || er.height === 0) continue;
-        if (invisiblePorRecorte(el)) continue;
-        rects.push(er);
-      }
-
-      const topMin = h / 2 + 8, topMax = vh - h / 2 - 8;
-      // ¿El FAB centrado en `c` invade algún control? (-1 = posición libre)
-      const lowestConflict = (c) => {
-        const top = c - h / 2 + 2;    // +2/-2: tolerancia anti-parpadeo
-        const bottom = c + h / 2 - 2;
-        let lowest = -1;
-        for (const r of rects) {
-          if (r.left < left + w - 2 && r.right > left + 2 &&
-              r.top < bottom && r.bottom > top) {
-            if (r.bottom > lowest) lowest = r.bottom;
-          }
-        }
-        return lowest;
-      };
-      // Distancia vertical del FAB (centrado en c) al control más cercano:
-      // 0 si queda a la misma altura que un botón (al lado) o pegado a él
-      const nearestGap = (c) => {
-        const top = c - h / 2, bottom = c + h / 2;
-        let best = Infinity;
-        for (const r of rects) {
-          const gap = Math.max(r.top - bottom, top - r.bottom, 0);
-          if (gap < best) best = gap;
-        }
-        return best;
-      };
-
-      const seen = new Set();
-      let best = null;   // { c, score }
-      const consider = (c) => {
-        if (c < topMin || c > topMax) return;
-        const key = Math.round(c);
-        if (seen.has(key)) return;
-        seen.add(key);
-        if (lowestConflict(c) >= 0) return;
-        const score = nearestGap(c);
-        // Gana la posición más pegada a un control; a igualdad, la más
-        // cercana al punto medio de la pantalla (estabilidad)
-        if (!best || score < best.score - 0.5 ||
-            (Math.abs(score - best.score) <= 0.5 &&
-             Math.abs(c - vh / 2) < Math.abs(best.c - vh / 2))) {
-          best = { c, score };
-        }
-      };
-
-      // Candidatos: pegado justo debajo y justo encima de cada control
-      for (const r of rects) {
-        consider(r.bottom + 10 + h / 2);
-        consider(r.top - 10 - h / 2);
-      }
-      // Respaldo: punto medio de la pantalla (si no hay controles cerca)
-      consider(vh / 2);
-
-      fab.style.top = (best ? best.c : topMax) + 'px';  // el CSS mantiene translateY(-50%)
+    document.querySelectorAll('.back-btn').forEach(b => {
+      if (b.style.top) b.style.top = '';
     });
   }
 
   function scheduleBackBtnUpdate() {
-    if (_backBtnRafPending) return;
-    _backBtnRafPending = true;
-    requestAnimationFrame(() => {
-      _backBtnRafPending = false;
-      updateBackBtnPositions();
-    });
+    requestAnimationFrame(updateBackBtnPositions);
   }
-
-  // Reposicionar al hacer scroll (página o contenedores internos como la
-  // tabla de Configuración, gracias a capture) y al redimensionar
-  window.addEventListener('scroll', scheduleBackBtnUpdate, { passive: true, capture: true });
-  window.addEventListener('resize', scheduleBackBtnUpdate);
 
   // ── Exponemos al HTML ──────────────────────────────────
   window.ies = {
@@ -4280,13 +4179,13 @@
   /* ══ Group view ═════════════════════════════════════ */
   #view-group {}
 
-  /* ══ Botón Volver - FAB flotante a media altura, lado derecho ═══ */
+  /* ══ Botón Volver - FAB SIEMPRE centrado, lado derecho (cualquier dispositivo) ═══ */
 
   /* Estilos base comunes: fijo en el lateral derecho de la pantalla,
-     centrado verticalmente (siempre a la mitad), visible (flotante)
-     aunque se haga scroll. El JS (updateBackBtnPositions) puede ajustar
-     style.top para no tapar botones: entonces se coloca justo debajo de
-     la última fila de controles, lo más cerca posible de la mitad. */
+     centrado verticalmente (top: 50% del viewport) en CUALQUIER
+     dispositivo, visible (flotante) aunque se haga scroll. El JS ya NO
+     reubica el botón: este centrado CSS es definitivo y
+     updateBackBtnPositions solo limpia residuos inline defensivamente. */
   .back-btn {
     display: inline-flex; align-items: center; gap: .4rem;
     position: fixed;
@@ -5959,8 +5858,7 @@
     <h2 class="group-heading" id="groupTitle"></h2>
     <div class="app-grid" id="appGrid"></div>
     <!-- Botón Volver flotante (FAB): fijo en el lateral derecho, centrado
-         verticalmente (a la mitad); si hubiera botones en ese hueco, el JS
-         lo coloca justo debajo de la última fila, siempre a la derecha -->
+         verticalmente a la mitad de la pantalla, en cualquier dispositivo -->
     <button class="back-btn" onclick="ies.renderHome()">Volver</button>
   </section>
 
