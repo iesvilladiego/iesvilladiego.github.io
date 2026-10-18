@@ -5579,6 +5579,11 @@
     }
     table#appsTable td:last-child::before,
     table#adminsTable td:last-child::before { display: none; }
+    /* Los 3 botones (🚀 Lanzar · ✎ Editar · ✕ Eliminar) centrados
+       horizontalmente, alineados con el eje de la fila de checks de
+       clasificación que tienen encima (Prof./Gest./Rec./IA/Act.).
+       #adminsTable conserva su alineación a la izquierda. */
+    table#appsTable tbody td:last-child { justify-content: center; }
     /* Los 5 checks de clasificación (Prof./Gest./Rec./IA/Act.) en UNA
        sola fila: rejilla de 10 pistas → Nombre y Descripción ocupan
        5+5 pistas, la URL va a ancho completo y cada check toma 2 pistas
