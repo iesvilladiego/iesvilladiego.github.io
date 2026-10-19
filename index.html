@@ -4578,6 +4578,20 @@
   /* ══ Tablas (desktop) → Tarjetas (móvil) ══════════ */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+  /* Mantener los encabezados de aplicaciones a la vista al recorrer la lista.
+     La tabla conserva su ancho en móvil y puede desplazarse horizontalmente. */
+  table#appsTable thead {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  table#appsTable th {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .16);
+  }
+
   table#appsTable,
   table#adminsTable {
     width: 100%; border-collapse: collapse; font-size: .85rem;
@@ -5585,7 +5599,36 @@
 
   /* ── Móvil (≤ 599px): tabla → tarjetas apiladas ──── */
   @media (max-width: 599px) {
-    table#appsTable thead,
+    /* En móvil la tabla se muestra como tarjetas, pero se conserva una
+       cabecera compacta y fija para identificar las opciones de perfil. */
+    table#appsTable thead {
+      display: table-header-group;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      width: max-content;
+      min-width: 100%;
+    }
+    table#appsTable thead tr {
+      display: table-row;
+      padding: 0;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    table#appsTable th {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding: .5rem .4rem;
+      font-size: .7rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .16);
+    }
+    table#appsTable thead th:nth-child(1),
+    table#appsTable thead th:nth-child(2),
+    table#appsTable thead th:nth-child(3) { display: none; }
+    table#adminsTable thead,
     table#adminsTable thead { display: none; }
     table#appsTable,
     table#adminsTable { display: block; width: 100%; }
