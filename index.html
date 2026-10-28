@@ -405,6 +405,14 @@
 
   // ── Botones principales: piden contraseña antes de mostrar el grupo ──
   function requestGroupAccess(group) {
+    // Administrador: acceso libre a cualquier grupo (no se le pide la
+    // contraseña del perfil). Es la base del «modo edición»: el admin
+    // puede entrar a Profesorado/Gestión/Recursos/IA y verá en cada
+    // tarjeta un botón ✎ al pasar el ratón o mantener pulsado.
+    if (unlockedInSession.has("admin")) {
+      showGroup(group);
+      return;
+    }
     const expected = groupPasswords[group];
     // Memoria de sesión: si esta contraseña ya se validó antes en esta
     // sesión, no volver a pedírsela al usuario (hasta que se reinicie la
@@ -562,12 +570,16 @@
     if (!GROUP_KEYS.includes(group)) return;
     // Solo apps ACTIVAS: las desactivadas por el administrador no se muestran
     // en el perfil (isAppActive: apps sin la propiedad «active» = activas)
-    let filtered = apps.filter(a => a[group] && isAppActive(a));
+    // Filtrar manteniendo el índice ORIGINAL en `apps`: necesario para
+    // que el botón ✎ de cada tarjeta pueda llamar a ies.editApp(i)
+    // con el índice correcto aunque la lista esté filtrada/ordenada.
+    const indexed = [];
+    apps.forEach((a, i) => { if (a[group] && isAppActive(a)) indexed.push({ app: a, idx: i }); });
     // Ordenar alfabéticamente por nombre (case-insensitive, español)
-    filtered.sort((a, b) => compareSpanishText(a.name, b.name));
+    indexed.sort((x, y) => compareSpanishText(x.app.name, y.app.name));
     const grid     = document.getElementById("appGrid");
-    grid.innerHTML = filtered.length
-      ? filtered.map(a => appCard(a)).join("")
+    grid.innerHTML = indexed.length
+      ? indexed.map(({ app, idx }) => appCard(app, idx)).join("")
       : "<p class='empty'>No hay aplicaciones configuradas para este grupo.</p>";
 
     document.getElementById("groupTitle").textContent = groupLabel(group);
@@ -578,7 +590,7 @@
     // Lanzar descubrimiento asíncrono de iconos vía manifest/HTML
     // para cada tarjeta (buscará los iconos reales de la app y los
     // antepondrá a la cadena de fallback).
-    if (filtered.length) {
+    if (indexed.length) {
       grid.querySelectorAll("img[data-app-url]").forEach(img => {
         const url = img.getAttribute("data-app-url");
         if (url) {
@@ -704,12 +716,22 @@
   const LOGIN_IDEIA_LABEL = "Login del profesorado con usuario IdEA";
   const LOGIN_USU_LABEL   = "Login del profesorado con usuario / usuario.";
 
-  function appCard(a) {
+  function appCard(a, appIdx) {
     // Sanitización XSS: escapar nombre y validar URL
     const safeName = escHtml(a.name || 'Sin nombre');
     const safeUrl  = sanitizeUrl(a.url);
 
-    const sources = iconSources(safeUrl);
+    // Cadena de iconos: si la app tiene iconUrl personalizado, se usa
+    // como PRIORIDAD MÁXIMA (por delante de manifest/HTML/favicon/emoji).
+    // El resto de la cadena sigue siendo la misma, de modo que si el
+    // icono personalizado falla al cargar (URL rota, CORS, etc.) se
+    // cae automáticamente al siguiente source.
+    const sources = [];
+    if (a.iconUrl && String(a.iconUrl).trim()) {
+      const safeIconUrl = sanitizeUrl(a.iconUrl);
+      if (safeIconUrl && safeIconUrl !== '#') sources.push(safeIconUrl);
+    }
+    sources.push(...iconSources(safeUrl));
     // Último fallback: icono auto-generado a partir de la descripción/nombre
     sources.push(generateAutoIcon(a));
     const first   = sources[0] || DEFAULT_ICON_SVG;
@@ -717,16 +739,28 @@
     const fbAttr  = rest.length
       ? ` data-fb="${escHtml(JSON.stringify(rest))}"`
       : "";
+
+    // Botón ✎ de edición: solo se renderiza cuando el administrador ha
+    // iniciado sesión (unlockedInSession.has("admin")). Se revela al
+    // hover (desktop) o pulsación larga (móvil/tablet — handler táctil
+    // añade la clase .reveal-edit-btn a la tarjeta). El click se detiene
+    // para no disparar la navegación de la tarjeta padre (<a href>).
+    const isAdmin = unlockedInSession.has("admin");
+    const idxAttr = Number.isInteger(appIdx) ? ` data-app-idx="${appIdx}"` : "";
+    const editBtn = isAdmin && Number.isInteger(appIdx)
+      ? `<button type="button" class="app-card-edit-btn" title="Editar aplicación" aria-label="Editar ${safeName}" onclick="event.preventDefault(); event.stopPropagation(); ies.editApp(${appIdx})">✎</button>`
+      : "";
+
     return `
       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="app-card"
          data-app-desc="${escHtml(a.desc || '')}"
-         data-app-login="${escHtml(a.loginIdeia ? LOGIN_IDEIA_LABEL : (a.loginUsu ? LOGIN_USU_LABEL : ''))}">
+         data-app-login="${escHtml(a.loginIdeia ? LOGIN_IDEIA_LABEL : (a.loginUsu ? LOGIN_USU_LABEL : ''))}"${idxAttr}>
         <div class="app-card-icon-wrap">
           <img src="${first}" alt="" loading="lazy"${fbAttr}
                data-app-url="${safeUrl}"
                onerror="ies.iconFallback(this)">
         </div>
-        <span class="app-card-name">${safeName}</span>
+        <span class="app-card-name">${safeName}</span>${editBtn}
       </a>`;
   }
 
@@ -1744,6 +1778,9 @@
     document.getElementById("addAppName").value = a ? (a.name || "") : "";
     document.getElementById("addAppDesc").value = a ? (a.desc || "") : "";
     document.getElementById("addAppUrl").value  = a ? (a.url || URL_PREFIX) : URL_PREFIX;
+    // Icono personalizado (URL opcional guardada en la BD)
+    document.getElementById("addAppIconUrl").value = a ? (a.iconUrl || "") : "";
+    updateIconPreview();
     document.getElementById("addAppProfesorado").checked = a ? !!a.profesorado : false;
     document.getElementById("addAppGestion").checked     = a ? !!a.gestion : false;
     document.getElementById("addAppRecursos").checked    = a ? !!a.recursos : false;
@@ -2059,6 +2096,11 @@
     const name = document.getElementById("addAppName").value.trim();
     const desc = document.getElementById("addAppDesc").value.trim();
     const url  = document.getElementById("addAppUrl").value.trim() || URL_PREFIX;
+    // Icono personalizado: solo se guarda si es URL http/https válida
+    // (sanitizeUrl rechaza javascript:, data:, etc.). Cadena vacía →
+    // no se persiste la propiedad (limpieza al resetear).
+    const iconUrlRaw = document.getElementById("addAppIconUrl").value.trim();
+    const iconUrl    = iconUrlRaw && /^https?:\/\//i.test(iconUrlRaw) ? iconUrlRaw : "";
     const pro  = !!document.getElementById("addAppProfesorado").checked;
     const ges  = !!document.getElementById("addAppGestion").checked;
     const rec  = !!document.getElementById("addAppRecursos").checked;
@@ -2101,6 +2143,10 @@
       a.profesorado = pro; a.gestion = ges; a.recursos = rec; a.ia = ia;
       a.active = activa;
       a.loginIdeia = loginIdeia; a.loginUsu = loginUsu;
+      // iconUrl: si está vacío se ELIMINA la propiedad para que no
+      // quede como "" en la BD (vuelve al icono detectado automáticamente).
+      if (iconUrl) a.iconUrl = iconUrl;
+      else delete a.iconUrl;
     } else if (restoring) {
       // Restauración: devolver a la lista principal la app guardada
       // en la papelera. Se parte del objeto original (conserva propiedades
@@ -2108,10 +2154,14 @@
       const src = deletedApps[_restoreIdx];
       delete src.deletedAt;
       Object.assign(src, { name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu });
+      if (iconUrl) src.iconUrl = iconUrl;
+      else delete src.iconUrl;
       apps.push(src);
       deletedApps.splice(_restoreIdx, 1);
     } else {
-      apps.push({ name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu });
+      const newApp = { name, desc, url, profesorado: pro, gestion: ges, recursos: rec, ia, active: activa, loginIdeia, loginUsu };
+      if (iconUrl) newApp.iconUrl = iconUrl;
+      apps.push(newApp);
     }
 
     // Refrescar la tabla. En el alta se resetean los filtros (comportamiento
@@ -2143,6 +2193,81 @@
         });
       }
     });
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  ICONO PERSONALIZADO — vista previa en el modal de alta/edición
+  // ══════════════════════════════════════════════════════
+  // Actualiza la vista previa del icono cuando el usuario teclea una URL.
+  // - URL vacía: oculta preview y botón reset, limpia estilos.
+  // - URL no http/https: marca el campo en rojo, sin pintar preview.
+  // - URL válida: pinta la imagen; si falla (onerror), iconPreviewError
+  //   avisa al usuario de que la URL no es accesible.
+  function updateIconPreview() {
+    const inp      = document.getElementById("addAppIconUrl");
+    const preview  = document.getElementById("iconPreview");
+    const resetBtn = document.getElementById("resetIconBtn");
+    const wrap     = document.getElementById("iconPreviewWrap");
+    const errHint  = document.getElementById("iconPreviewError");
+    if (!inp || !preview || !resetBtn || !wrap) return;
+    const raw = (inp.value || "").trim();
+    if (!raw) {
+      preview.src = "";
+      preview.classList.remove("icon-preview-error");
+      wrap.classList.add("hidden");
+      resetBtn.classList.add("hidden");
+      if (errHint) { errHint.classList.add("hidden"); errHint.textContent = ""; }
+      inp.style.borderColor = "";
+      inp.style.boxShadow   = "";
+      return;
+    }
+    if (!/^https?:\/\//i.test(raw)) {
+      inp.style.borderColor = "var(--danger)";
+      inp.style.boxShadow   = "0 0 0 2px rgba(192,57,43,.18)";
+      wrap.classList.remove("hidden");
+      preview.src = "";
+      preview.classList.add("icon-preview-error");
+      resetBtn.classList.remove("hidden");
+      if (errHint) {
+        errHint.textContent = "⚠️ La URL debe empezar por http:// o https://";
+        errHint.classList.remove("hidden");
+      }
+      return;
+    }
+    inp.style.borderColor = "";
+    inp.style.boxShadow   = "";
+    wrap.classList.remove("hidden");
+    preview.src = raw;
+    preview.classList.remove("icon-preview-error");
+    resetBtn.classList.remove("hidden");
+    if (errHint) { errHint.classList.add("hidden"); errHint.textContent = ""; }
+  }
+
+  // Reset del icono personalizado: vacía el campo y refresca la vista previa.
+  // La limpieza se persiste al confirmar el modal (confirmAddApp elimina
+  // la propiedad iconUrl de la app si el campo está vacío).
+  function resetCustomIcon() {
+    const inp = document.getElementById("addAppIconUrl");
+    if (inp) inp.value = "";
+    updateIconPreview();
+    showToast("🔄 Icono restaurado: se usará el detectado automáticamente al guardar.", "ok", 2500);
+  }
+
+  // Manejador onerror de la imagen de vista previa: si la URL no carga,
+  // muestra el icono por defecto y avisa al usuario.
+  function iconPreviewError(img) {
+    img.src = DEFAULT_ICON_SVG;
+    img.classList.add("icon-preview-error");
+    const inp = document.getElementById("addAppIconUrl");
+    if (inp) {
+      inp.style.borderColor = "var(--danger)";
+      inp.style.boxShadow   = "0 0 0 2px rgba(192,57,43,.18)";
+    }
+    const errHint = document.getElementById("iconPreviewError");
+    if (errHint) {
+      errHint.textContent = "⚠️ No se pudo cargar la imagen desde esa URL. Comprueba que es accesible públicamente (sin inicio de sesión).";
+      errHint.classList.remove("hidden");
+    }
   }
 
   window._delApp = function(i) {
@@ -2652,6 +2777,7 @@
         'Nombre':      a.name || '',
         'Descripción': a.desc || '',
         'URL':         a.url || '',
+        'Icono URL':   a.iconUrl || '',
         'Profesorado': a.profesorado ? 'Sí' : 'No',
         'Gestión':     a.gestion     ? 'Sí' : 'No',
         'Recursos':    a.recursos    ? 'Sí' : 'No',
@@ -2714,6 +2840,7 @@
         { wch: 25 },  // Nombre
         { wch: 45 },  // Descripción
         { wch: 55 },  // URL
+        { wch: 40 },  // Icono URL
         { wch: 12 },  // Profesorado
         { wch: 12 },  // Gestión
         { wch: 12 },  // Recursos
@@ -2796,7 +2923,8 @@
         bodyStyles: { fontSize: 8, cellPadding: 1.5 },
         alternateRowStyles: { fillColor: [247, 244, 239] },  // crema
         columnStyles: {
-          2: { cellWidth: 70 },   // URL más ancha
+          2: { cellWidth: 60 },   // URL
+          3: { cellWidth: 50 },   // Icono URL
         },
         margin: { left: 14, right: 14 },
         didDrawPage: () => { y = doc.lastAutoTable.finalY + 8; }
@@ -3320,6 +3448,7 @@
           name: String(pickImportField(r, 'Nombre', 'name') || ''),
           desc: String(pickImportField(r, 'Descripción', 'Descripcion', 'desc') || ''),
           url:  String(pickImportField(r, 'URL', 'url', 'Enlace') || ''),
+          iconUrl: String(pickImportField(r, 'Icono URL', 'Icono', 'iconUrl') || ''),
           profesorado: parseImportBool(pickImportField(r, 'Profesorado', 'Prof.')),
           gestion:     parseImportBool(pickImportField(r, 'Gestión', 'Gestion', 'Gest.')),
           recursos:    parseImportBool(pickImportField(r, 'Recursos', 'Rec.', 'Administrativa', 'Adm.')),
@@ -3420,16 +3549,21 @@
       return;
     }
 
-    const imported = toImport.map(c => ({
-      name: c.name,
-      desc: c.desc,
-      url:  c.url,
-      profesorado: c.profesorado,
-      gestion: c.gestion,
-      recursos: c.recursos,
-      ia: c.ia,
-      active: c.active !== false
-    }));
+    const imported = toImport.map(c => {
+      const o = {
+        name: c.name,
+        desc: c.desc,
+        url:  c.url,
+        profesorado: c.profesorado,
+        gestion: c.gestion,
+        recursos: c.recursos,
+        ia: c.ia,
+        active: c.active !== false
+      };
+      // Solo conservar iconUrl si es URL válida http/https
+      if (c.iconUrl && /^https?:\/\//i.test(c.iconUrl)) o.iconUrl = c.iconUrl;
+      return o;
+    });
 
     apps = apps.concat(imported);
     const ok = await saveApps();
@@ -3656,14 +3790,25 @@
     if (!card) return;
     const t = e.touches && e.touches[0];
     if (t) _cardLpStart = { x: t.clientX, y: t.clientY };
+    // Sin descripción Y sin botón de edición (admin) → no hay nada que mostrar
     const desc = (card.getAttribute("data-app-desc") || "").trim();
-    if (!desc) return;  // sin descripción no hay modal ni supresión de click
+    const hasEditBtn = !!card.querySelector(".app-card-edit-btn");
+    if (!desc && !hasEditBtn) return;
     cancelAppLongPress();
     _cardLpTimer = setTimeout(() => {
       _cardLpTimer = null;
       _cardLpFired = true;
       setTimeout(() => { _cardLpFired = false; }, 700);  // auto-reset si el click nunca llega
-      showAppDescModal(card, { centered: true });
+      // Admin: revelar el botón ✎ (lo mantiene visible hasta que se
+      // pulse o se haga clic fuera — handler de limpieza más abajo).
+      if (hasEditBtn) {
+        document.querySelectorAll(".app-card.reveal-edit-btn").forEach(c => {
+          if (c !== card) c.classList.remove("reveal-edit-btn");
+        });
+        card.classList.add("reveal-edit-btn");
+      }
+      // Descripción: solo si la app la tiene (comportamiento existente)
+      if (desc) showAppDescModal(card, { centered: true });
       try { if (navigator.vibrate) navigator.vibrate(30); } catch (_) {}
     }, 550);
   }, { passive: true });
@@ -3680,15 +3825,31 @@
 
   // Click tras pulsación larga: NO abrir la app NI cerrar el modal recién
   // mostrado (capture: corre antes que el cierre por «tocar fuera»).
+  // EXCEPCIÓN: si el click va sobre el botón ✎ de edición, se permite
+  // pasar para que dispare ies.editApp(i). El botón ya detiene la
+  // navegación con preventDefault/stopPropagation en su propio onclick.
   document.addEventListener("click", (e) => {
     if (_cardLpFired) {
       _cardLpFired = false;
+      if (e.target.closest && e.target.closest(".app-card-edit-btn")) {
+        // Dejar que el onclick del botón procese la edición
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       return;
     }
     if (e.target.closest && e.target.closest(".app-card")) hideDescModal(true);
   }, true);
+
+  // Limpieza del estado «reveal-edit-btn»: al hacer clic fuera de la
+  // tarjeta activa, ocultar el botón ✎ en todas las tarjetas.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest || !e.target.closest(".app-card")) {
+      document.querySelectorAll(".app-card.reveal-edit-btn").forEach(c =>
+        c.classList.remove("reveal-edit-btn"));
+    }
+  });
 
   // Sin menú contextual nativo en las tarjetas durante gestos táctiles
   // recientes (el clic derecho del ratón en desktop queda intacto).
@@ -3844,6 +4005,8 @@
     // Búsqueda de aplicaciones por palabras clave (Configuración)
     showSearchAppModal, closeSearchAppModal, runSearchAppModal, selectSearchApp,
     addAppNameInput, addAppFormChanged,
+    // Icono personalizado: vista previa y reset en el modal de alta/edición
+    updateIconPreview, resetCustomIcon, iconPreviewError,
     addAdminRow, saveAdminsConfig,
     showChangePassModal, closeChangePassModal, doChangePassword, syncCpCurrentVisibility,
     showSetupModal, closeSetupModal, doSetupAdmin,
@@ -4408,6 +4571,11 @@
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
     min-height: 0;
+    /* position:relative necesario para anclar el botón ✎ de edición
+       a la esquina superior derecha de la tarjeta completa (no del
+       icono, que está centrado y dejaría el botón desplazado a la
+       izquierda del borde derecho real de la tarjeta). */
+    position: relative;
   }
   .app-card:hover {
     transform: translateY(-4px);
@@ -4429,11 +4597,111 @@
     width: 72px; height: 72px;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
+    position: relative;  /* necesario para el botón ✎ absoluto */
   }
   .app-card-icon-wrap img {
     width: 72px; height: 72px;
     object-fit: contain;
     border-radius: 12px;
+  }
+
+  /* ══ Botón ✎ de edición en tarjetas (visible para admin) ══
+     Oculto por defecto; se revela al pasar el ratón (desktop) o con
+     pulsación larga (móvil/tablet). Detiene la propagación del click
+     para no disparar la navegación de la tarjeta padre. */
+  .app-card-edit-btn {
+    position: absolute;
+    /* Esquina superior derecha de la TARJETA (no del icono): top/right
+       positivos sitúan el botón DENTRO de la tarjeta, respetando el
+       border-radius (14px) sin sobresalir. El contenedor de referencia
+       es .app-card (position:relative aplicado arriba). */
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: var(--white);
+    border: 2px solid var(--gold);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .85rem;
+    font-weight: 700;
+    opacity: 0;
+    transition: opacity .18s ease, transform .15s ease, background .15s ease, color .15s ease;
+    z-index: 5;
+    padding: 0;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Desktop: hover revela el botón */
+  .app-card:hover .app-card-edit-btn,
+  .app-card:focus-within .app-card-edit-btn {
+    opacity: 1;
+  }
+  /* Móvil/tablet: pulsación larga añade .reveal-edit-btn desde JS */
+  .app-card.reveal-edit-btn .app-card-edit-btn {
+    opacity: 1;
+  }
+  .app-card-edit-btn:hover {
+    background: var(--gold);
+    color: var(--navy);
+    transform: scale(1.15);
+  }
+  .app-card-edit-btn:active {
+    transform: scale(.95);
+  }
+
+  /* ══ Vista previa de icono personalizado (modal alta/edición) ══ */
+  .icon-preview-wrap {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin: .4rem 0 .2rem;
+    padding: .6rem .7rem;
+    background: #f6f5ea;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+  }
+  .icon-preview-wrap.hidden { display: none; }
+  .icon-preview-label {
+    font-size: .78rem;
+    color: var(--muted);
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .icon-preview {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: var(--white);
+    border: 1px solid #e5e7eb;
+    flex-shrink: 0;
+    transition: opacity .15s ease, border-color .15s ease;
+  }
+  .icon-preview.icon-preview-error {
+    opacity: .35;
+    border-color: var(--danger);
+  }
+  .btn-reset-icon {
+    font-size: .78rem;
+    padding: .35rem .8rem;
+    min-height: 36px;
+    margin-left: auto;
+  }
+  .icon-preview-error-hint {
+    font-size: .76rem;
+    color: var(--danger);
+    margin: .25rem 0 .5rem;
+    line-height: 1.4;
   }
 
   .app-card-name {
@@ -6394,6 +6662,16 @@
       <div class="fi-label">URL</div>
       <input type="text" id="addAppUrl" class="fi" placeholder="https://iesvilladiego.github.io/…" oninput="ies.addAppFormChanged()">
       <div class="addapp-hint">La URL base del IES es <code>https://iesvilladiego.github.io/</code>: completa el path final (ej.: <code>https://iesvilladiego.github.io/mmo/</code>). Si la aplicación está en otro dominio, introduce la ruta completa de la PWA.</div>
+
+      <div class="fi-label">Icono personalizado (URL opcional)</div>
+      <input type="url" id="addAppIconUrl" class="fi" placeholder="https://…/icon.png" oninput="ies.updateIconPreview()" autocomplete="off">
+      <div class="addapp-hint">Pega aquí la URL de un icono (PNG, JPG, SVG, GIF…). Se guardará en la base de datos y se usará en lugar del detectado automáticamente. Si se deja vacío o se pulsa «Restaurar», se vuelve al icono por defecto.</div>
+      <div id="iconPreviewWrap" class="icon-preview-wrap hidden">
+        <span class="icon-preview-label">Vista previa:</span>
+        <img id="iconPreview" class="icon-preview" alt="" src="" onerror="ies.iconPreviewError(this)">
+        <button type="button" id="resetIconBtn" class="btn btn-ghost btn-reset-icon hidden" onclick="ies.resetCustomIcon()">🔄 Restaurar icono por defecto</button>
+      </div>
+      <div id="iconPreviewError" class="icon-preview-error-hint hidden"></div>
 
       <div class="fi-label">Perfiles <span class="req">*</span></div>
       <div class="addapp-profiles">
