@@ -1,18 +1,26 @@
 {
   "name": "Portal IES Virgen de Villadiego",
   "short_name": "IES VdV",
-  "description": "Portal de aplicaciones del IES Virgen de Villadiego. Acceso rápido a las aplicaciones del centro para Profesorado, Gestión y Administrativa.",
-  "id": "/portal-ies-vdv/",
+  "description": "Portal de aplicaciones del IES Virgen de Villadiego. Acceso rápido a las aplicaciones del centro para Profesorado, Gestión, Recursos e IA.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "any",
   "theme_color": "#2e3f52",
   "background_color": "#f3f1e7",
   "lang": "es",
   "dir": "ltr",
-  "categories": ["education", "productivity", "utilities"],
+  "categories": [
+    "education",
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "img/favicon-16x16.png",
@@ -76,22 +84,28 @@
   ],
   "shortcuts": [
     {
-      "name": "Profesorado",
-      "short_name": "Profesorado",
       "description": "Acceso a aplicaciones del profesorado",
-      "url": "/?perfil=profesorado"
+      "url": "/?perfil=profesorado",
+      "short_name": "Profesorado",
+      "name": "Profesorado"
     },
     {
-      "name": "Gestión",
-      "short_name": "Gestión",
       "description": "Acceso a aplicaciones de gestión",
-      "url": "/?perfil=gestion"
+      "url": "/?perfil=gestion",
+      "short_name": "Gestión",
+      "name": "Gestión"
     },
     {
-      "name": "Administrativa",
-      "short_name": "Administrativa",
-      "description": "Acceso a aplicaciones administrativas",
-      "url": "/?perfil=administrativa"
+      "description": "Acceso a aplicaciones y recursos del centro",
+      "url": "/?perfil=recursos",
+      "short_name": "Recursos",
+      "name": "Recursos"
+    },
+    {
+      "description": "Acceso a herramientas de inteligencia artificial",
+      "url": "/?perfil=ia",
+      "short_name": "IA",
+      "name": "IA"
     }
   ]
 }
