@@ -4074,16 +4074,35 @@
     scroll-behavior: smooth;
   }
 
+  /* La app ocupa exactamente el alto de la ventana: la cabecera queda
+     arriba y SOLO el bloque inferior (.app-scroll) se desplaza. Así la
+     barra de desplazamiento nace justo debajo del banner y no recorre
+     toda la ventana (con min-height:100dvh el scroll lo llevaba el
+     documento y la barra empezaba por encima de la cabecera). */
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: var(--cream);
     color: var(--text);
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow-x: hidden;
-    overscroll-behavior-y: none;
+    height: 100vh;              /* fallback: navegadores sin dvh */
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;           /* el scroll vive en .app-scroll */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Área de desplazamiento: empieza donde acaba la cabecera y termina
+     en el borde inferior de la ventana, así que su barra de scroll
+     arranca debajo del banner aunque la pantalla sea muy baja. */
+  .app-scroll {
+    flex: 1 1 auto;
+    min-height: 0;              /* imprescindible para encoger en flex */
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
   }
 
   .hidden { display: none !important; }
@@ -4131,7 +4150,10 @@
     align-items: center;
     justify-content: space-between;
     box-shadow: 0 2px 12px rgba(0,0,0,.3);
-    position: sticky; top: 0; z-index: 100;
+    /* Ya no hace falta sticky: el documento no se desplaza (ver body),
+       la cabecera es un hijo fijo del flex y el scroll ocurre debajo. */
+    position: relative; z-index: 100;
+    flex: 0 0 auto;
     gap: .75rem;
   }
   header h1 {
@@ -6098,6 +6120,10 @@
   /* ── Impresión ══════════════════════════════════════ */
   @media print {
     body { background: white; color: black; }
+    /* En impresión se vuelve al flujo normal: nada de ventana fija ni
+       de recortar el contenido a una sola pantalla */
+    body { display: block; height: auto; overflow: visible; }
+    .app-scroll { overflow: visible; min-height: 0; }
     header, .btn-config, .btn-tutorial, .tutorial-modal, .toast, .modal-bg { display: none !important; }
     .app-grid { grid-template-columns: repeat(4, 1fr); }
     .app-card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
@@ -6269,6 +6295,8 @@
 </div>
 
 <!-- ═══════════ MAIN ═══════════════════════════════════════ -->
+<!-- Contenedor con scroll propio: su barra empieza bajo la cabecera -->
+<div class="app-scroll">
 <main>
 
   <!-- Vista: HOME -->
@@ -6530,6 +6558,7 @@
   </section>
 
 </main>
+</div><!-- /.app-scroll -->
 
 <!-- ═══════════ MODAL LOGIN ADMINISTRADOR ══════════════════ -->
 <div id="loginModal" class="modal-bg hidden">
